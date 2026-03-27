@@ -2,7 +2,7 @@
 
 > Turn prompt chaos into control.
 
-[日本語版 / Japanese](README.ja.md)
+[![English](https://img.shields.io/badge/lang-English-blue)](README.md) [![日本語](https://img.shields.io/badge/lang-日本語-green)](README.ja.md)
 
 Siglane is a web-based tool for editing, organizing, and reusing prompts for image generation AI — line by line.
 
@@ -33,7 +33,7 @@ Shift from **writing** prompts to **operating** them.
 
 ## Features
 
-### MVP (Current)
+### MVP Scope
 
 - Auto-split comma-separated prompts into lines
 - Line-by-line editing

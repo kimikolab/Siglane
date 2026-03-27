@@ -2,7 +2,7 @@
 
 > Turn prompt chaos into control.
 
-[English](README.md)
+[![English](https://img.shields.io/badge/lang-English-blue)](README.md) [![日本語](https://img.shields.io/badge/lang-日本語-green)](README.ja.md)
 
 Siglane（シグレーン）は、画像生成AI向けのプロンプトを行単位で編集・整理・再利用できるWebツールです。
 
@@ -33,7 +33,7 @@ blue hair
 
 ## 機能
 
-### MVP（現在の開発対象）
+### MVPスコープ
 
 - カンマ区切りプロンプトの自動分解
 - 行単位の表示・編集
