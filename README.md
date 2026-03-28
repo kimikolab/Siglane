@@ -41,20 +41,23 @@ Shift from **writing** prompts to **operating** them.
 - Memo field for generation parameters (seed, cfg, etc.)
 - Session management — multiple sessions with create, rename, duplicate, delete
 - Templates — lock a session as read-only, click to create a working copy
-- Collapsible sidebar
+- Folder system — 2-level nesting (project → character → sessions), context menu with Move to / New subfolder, folder path breadcrumb in header
+- Collapsible sidebar with delete confirmation dialogs
+- ComfyUI workflow import/export — import a workflow JSON to auto-extract P/N prompts and generation params (seed, steps, cfg, model, etc.), edit in Siglane, export with prompts written back
 - Auto-save via localStorage
 
 ### v2 (Planned)
 
 - Prompt dictionary (register, browse, one-click insert)
 - JSON export / import
+- ComfyUI API integration for direct generation
 
 ### Future
 
-- API integration for image generation
 - Prompt history and diff comparison
+- Image attachment per session
 - Browser extension
-- External tool integration (ComfyUI / SD WebUI)
+- Local bridge for external tool integration
 
 ---
 
@@ -83,6 +86,9 @@ Siglane is not just a prompt formatter — it is an environment for treating pro
 - Understand the structure of prompts shared by others
 - Build a personal library of reusable prompt elements
 - Speed up the trial-and-error cycle
+- Manage prompts by project/character with folders
+- Record successful generation results — prompts + parameters in one session
+- Round-trip editing with ComfyUI via workflow JSON import/export
 
 ---
 
