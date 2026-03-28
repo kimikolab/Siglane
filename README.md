@@ -6,6 +6,8 @@
 
 Siglane is a web-based tool for editing, organizing, and reusing prompts for image generation AI — line by line.
 
+**[Try it live →](https://siglane.vercel.app/)**
+
 ---
 
 ## What is Siglane?
@@ -26,13 +28,14 @@ Shift from **writing** prompts to **operating** them.
 
 ## Features
 
-### MVP Scope
-
 - Auto-split comma-separated prompts into lines
+- Bracket-aware parsing — commas inside `()` `[]` `<>` are preserved
 - Line-by-line editing
 - Drag-and-drop reordering
 - Toggle each line ON/OFF
+- Line duplicate (Ctrl+D / ⌘+D)
 - Weight notation support (e.g. `(tag:1.2)`)
+- Positive / Negative prompt management
 - Reconstructed prompt display with one-click copy
 - Memo field for generation parameters (seed, cfg, etc.)
 - Auto-save via localStorage
@@ -42,7 +45,6 @@ Shift from **writing** prompts to **operating** them.
 - Prompt dictionary (register, browse, one-click insert)
 - Weight slider
 - JSON export / import
-- Negative prompt management
 
 ### Future
 
@@ -86,14 +88,14 @@ Siglane is not just a prompt formatter — it is an environment for treating pro
 - React / Next.js
 - TypeScript
 - Tailwind CSS
+- Vercel (hosting)
 
 ---
 
 ## Data Storage
 
-- Initial: Auto-save via localStorage
-- Supplement: JSON export / import
-- Future: File System API / cloud sync
+- Auto-save via localStorage
+- Future: JSON export / import, cloud sync
 
 ---
 
