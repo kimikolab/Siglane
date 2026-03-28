@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   SiglaneState,
   PromptLine,
@@ -14,31 +15,58 @@ import MemoBox from "@/components/MemoBox";
 
 const STORAGE_KEY = "siglane-state";
 
-const defaultState: SiglaneState = {
+// 初回アクセス時に表示するサンプル（クライアント側でのみ生成）
+function createSampleState(): SiglaneState {
+  return {
+    positiveLines: parsePrompt(
+      "masterpiece, best quality, 1girl, smile, blue hair, (soft lighting:1.2), <lora:add_detail:0.8>, bokeh"
+    ),
+    negativeLines: parsePrompt(
+      "worst quality, low quality, normal quality, lowres"
+    ),
+    memo: "seed: 12345 / cfg: 7 / steps: 28 / model: animagine-xl",
+  };
+}
+
+const emptyState: SiglaneState = {
   positiveLines: [],
   negativeLines: [],
   memo: "",
 };
 
 export default function Home() {
-  const [state, setState] = useState<SiglaneState>(defaultState);
+  const [state, setState] = useState<SiglaneState>(emptyState);
+  const [loaded, setLoaded] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const isInitial = useRef(true);
 
-  // localStorage読み込み
+  // localStorage読み込み（なければサンプルを表示）
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
         setState(JSON.parse(saved));
       } catch {
-        // パース失敗時はデフォルトのまま
+        setState(createSampleState());
       }
+    } else {
+      setState(createSampleState());
     }
+    setLoaded(true);
   }, []);
 
-  // 自動保存
+  // 自動保存（初回ロード時は保存しない）
   useEffect(() => {
+    if (!loaded) return;
+    if (isInitial.current) {
+      isInitial.current = false;
+      return;
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    setSavedFlash(true);
+    const timer = setTimeout(() => setSavedFlash(false), 1500);
+    return () => clearTimeout(timer);
+  }, [state, loaded]);
 
   // テキストエリア → グリッド同期（blur時に呼ばれる）
   const handleSyncPositive = (text: string) => {
@@ -147,6 +175,25 @@ export default function Home() {
     setState((prev) => ({ ...prev, memo }));
   };
 
+  const [showHelp, setShowHelp] = useState(false);
+
+  // ?キーでヘルプ表示
+  useEffect(() => {
+    const handleGlobalKey = (e: KeyboardEvent) => {
+      if ((e.key === "?" || (e.key === "/" && e.shiftKey)) && !e.ctrlKey && !e.metaKey) {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        e.preventDefault();
+        setShowHelp((prev) => !prev);
+      }
+      if (e.key === "Escape") {
+        setShowHelp(false);
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKey);
+    return () => window.removeEventListener("keydown", handleGlobalKey);
+  }, []);
+
   // テキストエリア用の文字列を算出
   const positiveAllText = joinAllPromptLines(state.positiveLines);
   const negativeAllText = joinAllPromptLines(state.negativeLines);
@@ -156,6 +203,23 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-neutral-900 text-neutral-100">
       <div className="max-w-4xl mx-auto p-6">
+        {/* ステータスバー */}
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => setShowHelp(true)}
+            className="text-xs text-neutral-600 hover:text-neutral-400 transition-colors"
+          >
+            Shortcuts &amp; Tips
+          </button>
+          <span
+            className={`text-xs transition-colors duration-500 ${
+              savedFlash ? "text-green-500" : "text-neutral-600"
+            }`}
+          >
+            {savedFlash ? "Saved ✓" : "Auto-saved locally"}
+          </span>
+        </div>
+
         {/* テキストエリア（P/N横並び） */}
         <div className="space-y-4 mb-6">
           <InputArea
@@ -192,6 +256,73 @@ export default function Home() {
         {/* メモ */}
         <MemoBox memo={state.memo} onMemoChange={handleMemoChange} />
       </div>
+
+      {/* ヘルプオーバーレイ（Portalでbody直下に描画） */}
+      {showHelp && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+          }}
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            style={{
+              backgroundColor: "#262626",
+              border: "1px solid #404040",
+              borderRadius: "8px",
+              padding: "24px",
+              maxWidth: "384px",
+              width: "100%",
+              margin: "0 16px",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-medium text-neutral-200">Keyboard shortcuts</h2>
+              <button
+                onClick={() => setShowHelp(false)}
+                className="text-neutral-500 hover:text-neutral-300 transition-colors"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-neutral-400">Duplicate line</span>
+                <kbd className="text-neutral-300 bg-neutral-700 px-1.5 py-0.5 rounded text-xs font-mono">Ctrl+D</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-400">Confirm edit</span>
+                <kbd className="text-neutral-300 bg-neutral-700 px-1.5 py-0.5 rounded text-xs font-mono">Enter</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-400">Cancel edit</span>
+                <kbd className="text-neutral-300 bg-neutral-700 px-1.5 py-0.5 rounded text-xs font-mono">Esc</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-400">Show this help</span>
+                <kbd className="text-neutral-300 bg-neutral-700 px-1.5 py-0.5 rounded text-xs font-mono">?</kbd>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-neutral-700 space-y-1.5 text-xs text-neutral-500">
+              <p>Click a line to edit it</p>
+              <p>Drag the handle to reorder</p>
+              <p>Toggle to include / exclude from output</p>
+              <p>Changes are saved automatically</p>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
