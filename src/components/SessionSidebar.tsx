@@ -42,6 +42,7 @@ function ContextMenu({
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [openSubmenuIdx, setOpenSubmenuIdx] = useState<number | null>(null);
+  const [adjustedPos, setAdjustedPos] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -53,13 +54,32 @@ function ContextMenu({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [onClose]);
 
-  const top = anchorRect.bottom + 4;
-  const left = Math.max(8, anchorRect.left - 120);
+  // メニュー描画後にはみ出しチェック
+  useEffect(() => {
+    if (!menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+    let top = anchorRect.bottom + 4;
+    let left = Math.max(8, anchorRect.left - 120);
+
+    if (top + rect.height > vh - 8) {
+      top = Math.max(8, anchorRect.top - rect.height - 4);
+    }
+    if (left + rect.width > vw - 8) {
+      left = Math.max(8, vw - rect.width - 8);
+    }
+    setAdjustedPos({ top, left });
+  }, [anchorRect]);
+
+  const initialTop = anchorRect.bottom + 4;
+  const initialLeft = Math.max(8, anchorRect.left - 120);
+  const pos = adjustedPos || { top: initialTop, left: initialLeft };
 
   return createPortal(
     <div
       ref={menuRef}
-      style={{ position: "fixed", top, left, zIndex: 9999 }}
+      style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 9999, visibility: adjustedPos ? "visible" : "hidden" }}
       className="bg-neutral-800 border border-neutral-600 rounded-lg shadow-2xl py-1.5 min-w-[170px]"
     >
       {actions.map((action, i) => {
@@ -378,23 +398,9 @@ export default function SessionSidebar({
         className={`group flex items-center gap-1.5 rounded-lg cursor-pointer transition-colors hover:bg-neutral-800/60 ${
           isSubfolder ? "py-1.5" : "py-2.5 border-l-2 border-amber-700/60"
         }`}
-        style={{ marginLeft: indent, paddingLeft: isSubfolder ? 12 : 10, paddingRight: 12 }}
+        style={{ marginLeft: indent, paddingLeft: 12, paddingRight: 12 }}
         onClick={() => !isRenaming && toggleFolderCollapse(folder.id)}
       >
-        {!isSubfolder && (
-          <span className="text-amber-600/80 flex-shrink-0">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M2 4.5A1.5 1.5 0 013.5 3H6l1.5 1.5h5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5v-7z"
-                fill="currentColor"
-                opacity="0.3"
-                stroke="currentColor"
-                strokeWidth="0.8"
-              />
-            </svg>
-          </span>
-        )}
-
         <span className="text-neutral-500 flex-shrink-0 w-4 text-center text-[11px]">
           {isCollapsed ? "▶" : "▼"}
         </span>
@@ -593,6 +599,20 @@ export default function SessionSidebar({
           </svg>
         </button>
         <button
+          onClick={() => onNewSession(null)}
+          className="text-neutral-400 hover:text-neutral-200 transition-colors p-1.5"
+          title="New session"
+        >
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M8 3v10M3 8h10"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        <button
           onClick={() => onNewFolder(null)}
           className="text-neutral-400 hover:text-neutral-200 transition-colors p-1.5"
           title="New folder"
@@ -608,20 +628,6 @@ export default function SessionSidebar({
               d="M8 7v4M6 9h4"
               stroke="currentColor"
               strokeWidth="1.2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-        <button
-          onClick={() => onNewSession(null)}
-          className="text-neutral-400 hover:text-neutral-200 transition-colors p-1.5"
-          title="New session"
-        >
-          <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M8 3v10M3 8h10"
-              stroke="currentColor"
-              strokeWidth="1.5"
               strokeLinecap="round"
             />
           </svg>
@@ -647,6 +653,20 @@ export default function SessionSidebar({
           </span>
           <div className="flex items-center gap-1">
             <button
+              onClick={() => onNewSession(null)}
+              className="text-neutral-400 hover:text-neutral-200 transition-colors p-2 rounded-lg hover:bg-neutral-800"
+              title="New session"
+            >
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M8 3v10M3 8h10"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+            <button
               onClick={() => onNewFolder(null)}
               className="text-neutral-400 hover:text-neutral-200 transition-colors p-2 rounded-lg hover:bg-neutral-800"
               title="New folder"
@@ -662,20 +682,6 @@ export default function SessionSidebar({
                   d="M8 7v4M6 9h4"
                   stroke="currentColor"
                   strokeWidth="1.2"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={() => onNewSession(null)}
-              className="text-neutral-400 hover:text-neutral-200 transition-colors p-2 rounded-lg hover:bg-neutral-800"
-              title="New session"
-            >
-              <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M8 3v10M3 8h10"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
                   strokeLinecap="round"
                 />
               </svg>
