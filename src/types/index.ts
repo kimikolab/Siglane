@@ -24,11 +24,31 @@ export function createPromptLine(text: string): PromptLine {
 }
 
 // カンマ区切りテキストをPromptLine[]に変換するパーサー
-// MVP版: シンプルなカンマ分割（括弧内のカンマは将来対応）
+// 括弧 () [] <> の中のカンマでは分割しない
 export function parsePrompt(raw: string): PromptLine[] {
   if (!raw.trim()) return [];
-  return raw
-    .split(",")
+
+  const results: string[] = [];
+  let current = "";
+  let depth = 0;
+
+  for (const ch of raw) {
+    if (ch === "(" || ch === "[" || ch === "<") {
+      depth++;
+      current += ch;
+    } else if (ch === ")" || ch === "]" || ch === ">") {
+      depth = Math.max(0, depth - 1);
+      current += ch;
+    } else if (ch === "," && depth === 0) {
+      results.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  results.push(current);
+
+  return results
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
     .map(createPromptLine);

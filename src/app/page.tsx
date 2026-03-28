@@ -80,12 +80,26 @@ export default function Home() {
     newText: string,
   ) => {
     const key = type === "positive" ? "positiveLines" : "negativeLines";
-    setState((prev) => ({
-      ...prev,
-      [key]: prev[key].map((line: PromptLine) =>
-        line.id === id ? { ...line, text: newText } : line,
-      ),
-    }));
+    const parsed = parsePrompt(newText);
+
+    if (parsed.length <= 1) {
+      // 分割不要 — そのまま更新
+      setState((prev) => ({
+        ...prev,
+        [key]: prev[key].map((line: PromptLine) =>
+          line.id === id ? { ...line, text: newText.trim() } : line,
+        ),
+      }));
+    } else {
+      // カンマで複数要素に分割 — 元の行を置き換え
+      setState((prev) => {
+        const lines = [...prev[key]];
+        const index = lines.findIndex((l: PromptLine) => l.id === id);
+        if (index === -1) return prev;
+        lines.splice(index, 1, ...parsed);
+        return { ...prev, [key]: lines };
+      });
+    }
   };
 
   const handleAdd = (type: "positive" | "negative", line: PromptLine) => {
@@ -94,6 +108,23 @@ export default function Home() {
       ...prev,
       [key]: [...prev[key], line],
     }));
+  };
+
+  const handleDuplicate = (type: "positive" | "negative", id: string) => {
+    const key = type === "positive" ? "positiveLines" : "negativeLines";
+    setState((prev) => {
+      const lines = [...prev[key]];
+      const index = lines.findIndex((l: PromptLine) => l.id === id);
+      if (index === -1) return prev;
+      const original = lines[index];
+      const copy: PromptLine = {
+        id: crypto.randomUUID(),
+        text: original.text,
+        enabled: original.enabled,
+      };
+      lines.splice(index + 1, 0, copy);
+      return { ...prev, [key]: lines };
+    });
   };
 
   const handleReorder = (
@@ -153,6 +184,7 @@ export default function Home() {
             onDelete={handleDelete}
             onUpdate={handleUpdate}
             onAdd={handleAdd}
+            onDuplicate={handleDuplicate}
             onReorder={handleReorder}
           />
         </div>

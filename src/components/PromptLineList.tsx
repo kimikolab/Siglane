@@ -21,6 +21,7 @@ interface PromptLineListProps {
   onDelete: (id: string) => void;
   onUpdate: (id: string, newText: string) => void;
   onAdd: (line: PromptLine) => void;
+  onDuplicate: (id: string) => void;
   onReorder: (activeId: string, overId: string) => void;
 }
 
@@ -30,6 +31,7 @@ export default function PromptLineList({
   onDelete,
   onUpdate,
   onAdd,
+  onDuplicate,
   onReorder,
 }: PromptLineListProps) {
   // PointerSensorを使い、少し動かしてからドラッグ開始（クリックと区別するため）
@@ -64,6 +66,7 @@ export default function PromptLineList({
               onToggle={onToggle}
               onDelete={onDelete}
               onUpdate={onUpdate}
+              onDuplicate={onDuplicate}
             />
           ))}
 

@@ -10,6 +10,7 @@ interface PromptLineItemProps {
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, newText: string) => void;
+  onDuplicate: (id: string) => void;
 }
 
 export default function PromptLineItem({
@@ -17,8 +18,9 @@ export default function PromptLineItem({
   onToggle,
   onDelete,
   onUpdate,
+  onDuplicate,
 }: PromptLineItemProps) {
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(line.text === "");
 
   // dnd-kitのソート用フック
   // WPFでいうと: Thumb.DragDeltaイベントのハンドリングを全部やってくれるヘルパー
@@ -37,11 +39,20 @@ export default function PromptLineItem({
     opacity: isDragging ? 0.5 : undefined,
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+      e.preventDefault();
+      onDuplicate(line.id);
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800 rounded border border-neutral-700/60 transition-opacity ${
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+      className={`flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800 rounded border border-neutral-700/60 transition-opacity focus:outline-none focus:border-neutral-500 ${
         line.enabled ? "opacity-100" : "opacity-40"
       }`}
     >
@@ -76,16 +87,37 @@ export default function PromptLineItem({
           autoFocus
           className="flex-1 bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-sm font-mono text-neutral-200 focus:outline-none focus:border-neutral-400"
           onBlur={(e) => {
-            onUpdate(line.id, e.currentTarget.value);
-            setIsEditing(false);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              onUpdate(line.id, e.currentTarget.value);
+            const val = e.currentTarget.value.trim();
+            if (val === "") {
+              onDelete(line.id);
+            } else {
+              onUpdate(line.id, val);
               setIsEditing(false);
             }
-            if (e.key === "Escape") {
+          }}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+              e.preventDefault();
+              e.stopPropagation();
+              onUpdate(line.id, e.currentTarget.value);
               setIsEditing(false);
+              onDuplicate(line.id);
+            }
+            if (e.key === "Enter") {
+              const val = e.currentTarget.value.trim();
+              if (val === "") {
+                onDelete(line.id);
+              } else {
+                onUpdate(line.id, val);
+                setIsEditing(false);
+              }
+            }
+            if (e.key === "Escape") {
+              if (line.text === "") {
+                onDelete(line.id);
+              } else {
+                setIsEditing(false);
+              }
             }
           }}
         />

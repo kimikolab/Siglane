@@ -10,6 +10,7 @@ interface PromptEditorProps {
   onDelete: (type: "positive" | "negative", id: string) => void;
   onUpdate: (type: "positive" | "negative", id: string, text: string) => void;
   onAdd: (type: "positive" | "negative", line: PromptLine) => void;
+  onDuplicate: (type: "positive" | "negative", id: string) => void;
   onReorder: (
     type: "positive" | "negative",
     activeId: string,
@@ -24,6 +25,7 @@ export default function PromptEditor({
   onDelete,
   onUpdate,
   onAdd,
+  onDuplicate,
   onReorder,
 }: PromptEditorProps) {
   return (
@@ -41,6 +43,7 @@ export default function PromptEditor({
         onDelete={(id) => onDelete("positive", id)}
         onUpdate={(id, text) => onUpdate("positive", id, text)}
         onAdd={(line) => onAdd("positive", line)}
+        onDuplicate={(id) => onDuplicate("positive", id)}
         onReorder={(activeId, overId) =>
           onReorder("positive", activeId, overId)
         }
@@ -59,6 +62,7 @@ export default function PromptEditor({
         onDelete={(id) => onDelete("negative", id)}
         onUpdate={(id, text) => onUpdate("negative", id, text)}
         onAdd={(line) => onAdd("negative", line)}
+        onDuplicate={(id) => onDuplicate("negative", id)}
         onReorder={(activeId, overId) =>
           onReorder("negative", activeId, overId)
         }
