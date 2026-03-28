@@ -376,11 +376,25 @@ export default function SessionSidebar({
       <div
         key={folder.id}
         className={`group flex items-center gap-1.5 rounded-lg cursor-pointer transition-colors hover:bg-neutral-800/60 ${
-          isSubfolder ? "py-1.5" : "py-2"
+          isSubfolder ? "py-1.5" : "py-2.5 border-l-2 border-amber-700/60"
         }`}
-        style={{ marginLeft: indent, paddingLeft: 12, paddingRight: 12 }}
+        style={{ marginLeft: indent, paddingLeft: isSubfolder ? 12 : 10, paddingRight: 12 }}
         onClick={() => !isRenaming && toggleFolderCollapse(folder.id)}
       >
+        {!isSubfolder && (
+          <span className="text-amber-600/80 flex-shrink-0">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M2 4.5A1.5 1.5 0 013.5 3H6l1.5 1.5h5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5v-7z"
+                fill="currentColor"
+                opacity="0.3"
+                stroke="currentColor"
+                strokeWidth="0.8"
+              />
+            </svg>
+          </span>
+        )}
+
         <span className="text-neutral-500 flex-shrink-0 w-4 text-center text-[11px]">
           {isCollapsed ? "▶" : "▼"}
         </span>
@@ -401,7 +415,7 @@ export default function SessionSidebar({
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <span className={`truncate block ${isSubfolder ? "text-xs text-neutral-400" : "text-sm text-neutral-300 font-medium"}`}>
+            <span className={`truncate block ${isSubfolder ? "text-xs text-neutral-400" : "text-sm text-neutral-100 font-medium"}`}>
               {folder.label}
             </span>
           )}
@@ -494,7 +508,11 @@ export default function SessionSidebar({
     actions.push({ label: "---", onClick: () => {} });
     actions.push({
       label: "Delete",
-      onClick: () => onDeleteSession(session.id),
+      onClick: () => {
+        if (window.confirm(`Delete "${session.label}"?`)) {
+          onDeleteSession(session.id);
+        }
+      },
       danger: true,
     });
 
@@ -526,7 +544,29 @@ export default function SessionSidebar({
     actions.push({ label: "---", onClick: () => {} });
     actions.push({
       label: "Delete folder",
-      onClick: () => onDeleteFolder(folder.id),
+      onClick: () => {
+        const subCount = folders.filter((f) => f.parentId === folder.id).length;
+        const sessionCount = sessions.filter(
+          (s) =>
+            !s.isTemplate &&
+            (s.folderId === folder.id ||
+              folders.some(
+                (f) => f.parentId === folder.id && f.id === s.folderId,
+              )),
+        ).length;
+        const details = [
+          subCount > 0 ? `${subCount} subfolder(s)` : "",
+          sessionCount > 0 ? `${sessionCount} session(s)` : "",
+        ]
+          .filter(Boolean)
+          .join(" and ");
+        const msg = details
+          ? `Delete "${folder.label}"? ${details} inside will be moved to Unfiled.`
+          : `Delete "${folder.label}"?`;
+        if (window.confirm(msg)) {
+          onDeleteFolder(folder.id);
+        }
+      },
       danger: true,
     });
 
@@ -549,6 +589,26 @@ export default function SessionSidebar({
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          onClick={() => onNewFolder(null)}
+          className="text-neutral-400 hover:text-neutral-200 transition-colors p-1.5"
+          title="New folder"
+        >
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M2 4.5A1.5 1.5 0 013.5 3H6l1.5 1.5h5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5v-7z"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M8 7v4M6 9h4"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinecap="round"
             />
           </svg>
         </button>
@@ -586,6 +646,26 @@ export default function SessionSidebar({
             Siglane
           </span>
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => onNewFolder(null)}
+              className="text-neutral-400 hover:text-neutral-200 transition-colors p-2 rounded-lg hover:bg-neutral-800"
+              title="New folder"
+            >
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M2 4.5A1.5 1.5 0 013.5 3H6l1.5 1.5h5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5v-7z"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M8 7v4M6 9h4"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
             <button
               onClick={() => onNewSession(null)}
               className="text-neutral-400 hover:text-neutral-200 transition-colors p-2 rounded-lg hover:bg-neutral-800"
@@ -652,16 +732,6 @@ export default function SessionSidebar({
               No sessions yet
             </div>
           )}
-
-          {/* New folder */}
-          <div className="pt-3 px-1">
-            <button
-              onClick={() => onNewFolder(null)}
-              className="w-full text-left px-3 py-2 text-xs text-neutral-600 hover:text-neutral-400 hover:bg-neutral-800/50 rounded-lg transition-colors"
-            >
-              + New folder
-            </button>
-          </div>
         </div>
       </div>
 
