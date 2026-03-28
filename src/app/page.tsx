@@ -131,13 +131,14 @@ export default function Home() {
         <div className="space-y-4 mb-6">
           <InputArea
             label="Positive"
-            rows={6}
+            rows={5}
             allText={positiveAllText}
             copyText={positiveCopyText}
             onSync={handleSyncPositive}
           />
           <InputArea
             label="Negative"
+            rows={2}
             labelColor="text-amber-600"
             allText={negativeAllText}
             copyText={negativeCopyText}
