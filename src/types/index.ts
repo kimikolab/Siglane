@@ -15,11 +15,21 @@ export interface Session {
   negativeLines: PromptLine[];
   memo: string;
   updatedAt: string;
+  folderId: string | null;
+}
+
+// フォルダ（2階層まで: root → subfolder）
+export interface Folder {
+  id: string;
+  label: string;
+  parentId: string | null;
+  order: number;
 }
 
 // アプリ全体の状態
 export interface AppState {
   sessions: Session[];
+  folders: Folder[];
   activeSessionId: string;
 }
 
@@ -42,7 +52,7 @@ export function createPromptLine(text: string): PromptLine {
 }
 
 // 空のセッションを作成
-export function createSession(label: string): Session {
+export function createSession(label: string, folderId: string | null = null): Session {
   return {
     id: crypto.randomUUID(),
     label,
@@ -51,7 +61,32 @@ export function createSession(label: string): Session {
     negativeLines: [],
     memo: "",
     updatedAt: new Date().toISOString(),
+    folderId,
   };
+}
+
+// フォルダを作成
+export function createFolder(
+  label: string,
+  parentId: string | null = null,
+  order: number = 0,
+): Folder {
+  return {
+    id: crypto.randomUUID(),
+    label,
+    parentId,
+    order,
+  };
+}
+
+// 2階層制約チェック: parentIdが既にサブフォルダならfalse
+export function canCreateSubfolder(
+  parentId: string,
+  folders: Folder[],
+): boolean {
+  const parent = folders.find((f) => f.id === parentId);
+  if (!parent) return false;
+  return parent.parentId === null;
 }
 
 // セッションを複製（新しいid、全行も新しいidを振り直す）
@@ -73,6 +108,7 @@ export function duplicateSession(
     })),
     memo: source.memo,
     updatedAt: new Date().toISOString(),
+    folderId: source.folderId,
   };
 }
 

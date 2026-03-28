@@ -2,43 +2,46 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Session } from "@/types";
+import { Session, Folder } from "@/types";
 
 interface SessionSidebarProps {
   sessions: Session[];
+  folders: Folder[];
   activeSessionId: string;
   collapsed: boolean;
   onToggleCollapse: () => void;
   onSelectSession: (id: string) => void;
-  onNewSession: () => void;
+  onNewSession: (folderId?: string | null) => void;
   onDuplicateSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
   onRenameSession: (id: string, newLabel: string) => void;
   onToggleTemplate: (id: string) => void;
   onOpenFromTemplate: (id: string) => void;
+  onMoveSession: (sessionId: string, folderId: string | null) => void;
+  onNewFolder: (parentId: string | null) => void;
+  onRenameFolder: (id: string, newLabel: string) => void;
+  onDeleteFolder: (id: string) => void;
 }
 
 // --- コンテキストメニュー（Portal描画） ---
-interface ContextMenuProps {
-  session: Session;
-  anchorRect: DOMRect;
-  onClose: () => void;
-  onRename: () => void;
-  onDuplicate: () => void;
-  onToggleTemplate: () => void;
-  onDelete: () => void;
+interface MenuAction {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+  submenu?: { label: string; onClick: () => void }[];
 }
 
 function ContextMenu({
-  session,
+  actions,
   anchorRect,
   onClose,
-  onRename,
-  onDuplicate,
-  onToggleTemplate,
-  onDelete,
-}: ContextMenuProps) {
+}: {
+  actions: MenuAction[];
+  anchorRect: DOMRect;
+  onClose: () => void;
+}) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [openSubmenuIdx, setOpenSubmenuIdx] = useState<number | null>(null);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -59,43 +62,72 @@ function ContextMenu({
       style={{ position: "fixed", top, left, zIndex: 9999 }}
       className="bg-neutral-800 border border-neutral-600 rounded-lg shadow-2xl py-1.5 min-w-[170px]"
     >
-      <button
-        onClick={() => {
-          onRename();
-          onClose();
-        }}
-        className="w-full text-left px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
-      >
-        Rename
-      </button>
-      <button
-        onClick={() => {
-          onDuplicate();
-          onClose();
-        }}
-        className="w-full text-left px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
-      >
-        Duplicate
-      </button>
-      <button
-        onClick={() => {
-          onToggleTemplate();
-          onClose();
-        }}
-        className="w-full text-left px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
-      >
-        {session.isTemplate ? "Unlock (remove template)" : "Lock as template"}
-      </button>
-      <div className="my-1 h-px bg-neutral-700 mx-3" />
-      <button
-        onClick={() => {
-          onDelete();
-          onClose();
-        }}
-        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-neutral-700 transition-colors"
-      >
-        Delete
-      </button>
+      {actions.map((action, i) => {
+        if (action.label === "---") {
+          return (
+            <div key={i} className="my-1 h-px bg-neutral-700 mx-3" />
+          );
+        }
+
+        if (action.submenu) {
+          return (
+            <div
+              key={i}
+              className="relative"
+              onMouseEnter={() => setOpenSubmenuIdx(i)}
+              onMouseLeave={() => setOpenSubmenuIdx(null)}
+            >
+              <button className="w-full text-left px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors flex items-center justify-between">
+                {action.label}
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M6 3l5 5-5 5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              {openSubmenuIdx === i && (
+                <div
+                  className="absolute left-full top-0 ml-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-2xl py-1.5 min-w-[140px]"
+                >
+                  {action.submenu.map((sub, si) => (
+                    <button
+                      key={si}
+                      onClick={() => {
+                        sub.onClick();
+                        onClose();
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-700 transition-colors"
+                    >
+                      {sub.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <button
+            key={i}
+            onClick={() => {
+              action.onClick();
+              onClose();
+            }}
+            className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+              action.danger
+                ? "text-red-400 hover:bg-neutral-700"
+                : "text-neutral-200 hover:bg-neutral-700"
+            }`}
+          >
+            {action.label}
+          </button>
+        );
+      })}
     </div>,
     document.body,
   );
@@ -104,6 +136,7 @@ function ContextMenu({
 // --- メインコンポーネント ---
 export default function SessionSidebar({
   sessions,
+  folders,
   activeSessionId,
   collapsed,
   onToggleCollapse,
@@ -114,43 +147,33 @@ export default function SessionSidebar({
   onRenameSession,
   onToggleTemplate,
   onOpenFromTemplate,
+  onMoveSession,
+  onNewFolder,
+  onRenameFolder,
+  onDeleteFolder,
 }: SessionSidebarProps) {
   const [menuOpen, setMenuOpen] = useState<{
-    sessionId: string;
+    type: "session" | "folder";
+    id: string;
     rect: DOMRect;
   } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renamingType, setRenamingType] = useState<"session" | "folder">("session");
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
 
   const closeMenu = useCallback(() => setMenuOpen(null), []);
 
-  const templates = sessions
-    .filter((s) => s.isTemplate)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const regular = sessions
-    .filter((s) => !s.isTemplate)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-
-  const handleSessionClick = (session: Session) => {
-    if (session.isTemplate) {
-      onOpenFromTemplate(session.id);
-    } else {
-      onSelectSession(session.id);
-    }
+  const toggleFolderCollapse = (folderId: string) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
   };
 
-  const startRename = (session: Session) => {
-    setRenamingId(session.id);
-    setRenameValue(session.label);
-  };
-
-  const commitRename = () => {
-    if (renamingId && renameValue.trim()) {
-      onRenameSession(renamingId, renameValue.trim());
-    }
-    setRenamingId(null);
-  };
-
+  // --- ヘルパー ---
   const formatDate = (iso: string) => {
     const d = new Date(iso);
     const now = new Date();
@@ -165,12 +188,352 @@ export default function SessionSidebar({
     return d.toLocaleDateString();
   };
 
-  const openMenu = (sessionId: string, buttonEl: HTMLElement) => {
-    const rect = buttonEl.getBoundingClientRect();
-    setMenuOpen({ sessionId, rect });
+  const startRename = (id: string, label: string, type: "session" | "folder") => {
+    setRenamingId(id);
+    setRenameValue(label);
+    setRenamingType(type);
   };
 
-  // 折りたたみ時
+  const commitRename = () => {
+    if (renamingId && renameValue.trim()) {
+      if (renamingType === "session") {
+        onRenameSession(renamingId, renameValue.trim());
+      } else {
+        onRenameFolder(renamingId, renameValue.trim());
+      }
+    }
+    setRenamingId(null);
+  };
+
+  const openMenu = (
+    type: "session" | "folder",
+    id: string,
+    buttonEl: HTMLElement,
+  ) => {
+    const rect = buttonEl.getBoundingClientRect();
+    setMenuOpen({ type, id, rect });
+  };
+
+  // --- データ整理 ---
+  const templates = sessions
+    .filter((s) => s.isTemplate)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  const regularSessions = sessions.filter((s) => !s.isTemplate);
+
+  const rootFolders = folders
+    .filter((f) => f.parentId === null)
+    .sort((a, b) => a.order - b.order);
+
+  const getSubfolders = (parentId: string) =>
+    folders
+      .filter((f) => f.parentId === parentId)
+      .sort((a, b) => a.order - b.order);
+
+  const getSessionsInFolder = (folderId: string) =>
+    regularSessions
+      .filter((s) => s.folderId === folderId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  const unfiled = regularSessions
+    .filter((s) => s.folderId === null || s.folderId === undefined)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  // フォルダ配下の全セッション数（サブフォルダ含む）
+  const countSessionsInTree = (folderId: string): number => {
+    let count = getSessionsInFolder(folderId).length;
+    for (const sub of getSubfolders(folderId)) {
+      count += getSessionsInFolder(sub.id).length;
+    }
+    return count;
+  };
+
+  // Move to メニュー用: 移動先候補を構築
+  const buildMoveTargets = (sessionId: string) => {
+    const session = sessions.find((s) => s.id === sessionId);
+    if (!session) return [];
+
+    const targets: { label: string; onClick: () => void }[] = [];
+
+    if (session.folderId !== null) {
+      targets.push({
+        label: "Unfiled",
+        onClick: () => onMoveSession(sessionId, null),
+      });
+    }
+
+    for (const root of rootFolders) {
+      if (session.folderId !== root.id) {
+        targets.push({
+          label: root.label,
+          onClick: () => onMoveSession(sessionId, root.id),
+        });
+      }
+      for (const sub of getSubfolders(root.id)) {
+        if (session.folderId !== sub.id) {
+          targets.push({
+            label: `${root.label} / ${sub.label}`,
+            onClick: () => onMoveSession(sessionId, sub.id),
+          });
+        }
+      }
+    }
+
+    return targets;
+  };
+
+  // --- セッションアイテム ---
+  const handleSessionClick = (session: Session) => {
+    if (session.isTemplate) {
+      onOpenFromTemplate(session.id);
+    } else {
+      onSelectSession(session.id);
+    }
+  };
+
+  const renderSessionItem = (session: Session, indent: number = 0) => {
+    const isActive = session.id === activeSessionId;
+    const isRenaming = renamingId === session.id && renamingType === "session";
+
+    return (
+      <div
+        key={session.id}
+        className={`group rounded-lg cursor-pointer transition-colors ${
+          isActive
+            ? "bg-neutral-700/60 border border-neutral-600/60"
+            : "hover:bg-neutral-800/80 border border-transparent"
+        }`}
+        style={{ marginLeft: indent, paddingLeft: 16, paddingRight: 16, paddingTop: 8, paddingBottom: 8 }}
+        onClick={() => !isRenaming && handleSessionClick(session)}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {session.isTemplate && (
+            <span className="flex-shrink-0 text-amber-500" title="Template">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 1l1.5 4.5H14l-3.5 2.5L12 13 8 10l-4 3 1.5-5L2 5.5h4.5z" />
+              </svg>
+            </span>
+          )}
+
+          <div className="flex-1 min-w-0">
+            {isRenaming ? (
+              <input
+                type="text"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitRename();
+                  if (e.key === "Escape") setRenamingId(null);
+                }}
+                autoFocus
+                className="w-full bg-neutral-900 border border-neutral-500 rounded px-2 py-0.5 text-sm text-neutral-200 focus:outline-none focus:border-neutral-400"
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <div className="truncate text-sm text-neutral-200">
+                {session.label}
+              </div>
+            )}
+            <div className="text-[11px] text-neutral-500 mt-0.5">
+              {formatDate(session.updatedAt)}
+            </div>
+          </div>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (menuOpen?.type === "session" && menuOpen.id === session.id) {
+                closeMenu();
+              } else {
+                openMenu("session", session.id, e.currentTarget);
+              }
+            }}
+            className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-200 transition-all p-1 rounded hover:bg-neutral-700"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+              <circle cx="8" cy="3" r="1.5" />
+              <circle cx="8" cy="8" r="1.5" />
+              <circle cx="8" cy="13" r="1.5" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // --- フォルダヘッダー ---
+  const renderFolderHeader = (
+    folder: Folder,
+    indent: number,
+    isCollapsed: boolean,
+    sessionCount: number,
+    isSubfolder: boolean,
+  ) => {
+    const isRenaming = renamingId === folder.id && renamingType === "folder";
+
+    return (
+      <div
+        key={folder.id}
+        className={`group flex items-center gap-1.5 rounded-lg cursor-pointer transition-colors hover:bg-neutral-800/60 ${
+          isSubfolder ? "py-1.5" : "py-2"
+        }`}
+        style={{ marginLeft: indent, paddingLeft: 12, paddingRight: 12 }}
+        onClick={() => !isRenaming && toggleFolderCollapse(folder.id)}
+      >
+        <span className="text-neutral-500 flex-shrink-0 w-4 text-center text-[11px]">
+          {isCollapsed ? "▶" : "▼"}
+        </span>
+
+        <div className="flex-1 min-w-0">
+          {isRenaming ? (
+            <input
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRename();
+                if (e.key === "Escape") setRenamingId(null);
+              }}
+              autoFocus
+              className="w-full bg-neutral-900 border border-neutral-500 rounded px-2 py-0.5 text-sm text-neutral-200 focus:outline-none focus:border-neutral-400"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className={`truncate block ${isSubfolder ? "text-xs text-neutral-400" : "text-sm text-neutral-300 font-medium"}`}>
+              {folder.label}
+            </span>
+          )}
+        </div>
+
+        {isCollapsed && sessionCount > 0 && (
+          <span className="text-[10px] text-neutral-600 flex-shrink-0">
+            {sessionCount}
+          </span>
+        )}
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (menuOpen?.type === "folder" && menuOpen.id === folder.id) {
+              closeMenu();
+            } else {
+              openMenu("folder", folder.id, e.currentTarget);
+            }
+          }}
+          className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-200 transition-all p-1 rounded hover:bg-neutral-700"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="8" cy="3" r="1.5" />
+            <circle cx="8" cy="8" r="1.5" />
+            <circle cx="8" cy="13" r="1.5" />
+          </svg>
+        </button>
+      </div>
+    );
+  };
+
+  // --- フォルダツリー描画 ---
+  const renderFolderTree = (folder: Folder, indent: number = 0) => {
+    const isCollapsed = collapsedFolders.has(folder.id);
+    const subfolders = getSubfolders(folder.id);
+    const directSessions = getSessionsInFolder(folder.id);
+    const isSubfolder = folder.parentId !== null;
+    const totalCount = isSubfolder
+      ? directSessions.length
+      : countSessionsInTree(folder.id);
+
+    return (
+      <div key={folder.id}>
+        {renderFolderHeader(folder, indent, isCollapsed, totalCount, isSubfolder)}
+
+        {!isCollapsed && (
+          <>
+            {subfolders.map((sub) =>
+              renderFolderTree(sub, indent + 16),
+            )}
+            {directSessions.map((s) =>
+              renderSessionItem(s, indent + 16),
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // --- メニューアクション構築 ---
+  const buildSessionMenuActions = (sessionId: string): MenuAction[] => {
+    const session = sessions.find((s) => s.id === sessionId);
+    if (!session) return [];
+
+    const moveTargets = buildMoveTargets(sessionId);
+    const actions: MenuAction[] = [
+      {
+        label: "Rename",
+        onClick: () => startRename(session.id, session.label, "session"),
+      },
+      {
+        label: "Duplicate",
+        onClick: () => onDuplicateSession(session.id),
+      },
+      {
+        label: session.isTemplate ? "Unlock (remove template)" : "Lock as template",
+        onClick: () => onToggleTemplate(session.id),
+      },
+    ];
+
+    if (moveTargets.length > 0) {
+      actions.push({
+        label: "Move to",
+        onClick: () => {},
+        submenu: moveTargets,
+      });
+    }
+
+    actions.push({ label: "---", onClick: () => {} });
+    actions.push({
+      label: "Delete",
+      onClick: () => onDeleteSession(session.id),
+      danger: true,
+    });
+
+    return actions;
+  };
+
+  const buildFolderMenuActions = (folderId: string): MenuAction[] => {
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder) return [];
+
+    const actions: MenuAction[] = [
+      {
+        label: "Rename",
+        onClick: () => startRename(folder.id, folder.label, "folder"),
+      },
+      {
+        label: "New session here",
+        onClick: () => onNewSession(folder.id),
+      },
+    ];
+
+    if (folder.parentId === null) {
+      actions.push({
+        label: "New subfolder",
+        onClick: () => onNewFolder(folder.id),
+      });
+    }
+
+    actions.push({ label: "---", onClick: () => {} });
+    actions.push({
+      label: "Delete folder",
+      onClick: () => onDeleteFolder(folder.id),
+      danger: true,
+    });
+
+    return actions;
+  };
+
+  // --- 折りたたみ時 ---
   if (collapsed) {
     return (
       <div className="flex flex-col items-center pt-6 gap-4 w-12 bg-neutral-950 border-r-2 border-neutral-700">
@@ -190,7 +553,7 @@ export default function SessionSidebar({
           </svg>
         </button>
         <button
-          onClick={onNewSession}
+          onClick={() => onNewSession(null)}
           className="text-neutral-400 hover:text-neutral-200 transition-colors p-1.5"
           title="New session"
         >
@@ -207,87 +570,12 @@ export default function SessionSidebar({
     );
   }
 
-  const menuSession = menuOpen
-    ? sessions.find((s) => s.id === menuOpen.sessionId)
-    : null;
-
-  const renderItem = (session: Session) => {
-    const isActive = session.id === activeSessionId;
-    const isRenaming = renamingId === session.id;
-
-    return (
-      <div
-        key={session.id}
-        className={`group rounded-lg px-4 py-3 cursor-pointer transition-colors ${
-          isActive
-            ? "bg-neutral-700/60 border border-neutral-600/60"
-            : "hover:bg-neutral-800/80 border border-transparent"
-        }`}
-        onClick={() => !isRenaming && handleSessionClick(session)}
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          {session.isTemplate && (
-            <span
-              className="flex-shrink-0 text-amber-500"
-              title="Template (click to create copy)"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-              >
-                <path d="M8 1l1.5 4.5H14l-3.5 2.5L12 13 8 10l-4 3 1.5-5L2 5.5h4.5z" />
-              </svg>
-            </span>
-          )}
-
-          <div className="flex-1 min-w-0">
-            {isRenaming ? (
-              <input
-                type="text"
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitRename();
-                  if (e.key === "Escape") setRenamingId(null);
-                }}
-                autoFocus
-                className="w-full bg-neutral-900 border border-neutral-500 rounded px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-neutral-400"
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <div className="truncate text-sm text-neutral-200">
-                {session.label}
-              </div>
-            )}
-            <div className="text-[11px] text-neutral-500 mt-0.5">
-              {formatDate(session.updatedAt)}
-            </div>
-          </div>
-
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (menuOpen?.sessionId === session.id) {
-                closeMenu();
-              } else {
-                openMenu(session.id, e.currentTarget);
-              }
-            }}
-            className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-neutral-200 transition-all p-1 rounded hover:bg-neutral-700"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <circle cx="8" cy="3" r="1.5" />
-              <circle cx="8" cy="8" r="1.5" />
-              <circle cx="8" cy="13" r="1.5" />
-            </svg>
-          </button>
-        </div>
-      </div>
-    );
-  };
+  const menuActions =
+    menuOpen?.type === "session"
+      ? buildSessionMenuActions(menuOpen.id)
+      : menuOpen?.type === "folder"
+        ? buildFolderMenuActions(menuOpen.id)
+        : [];
 
   return (
     <>
@@ -299,7 +587,7 @@ export default function SessionSidebar({
           </span>
           <div className="flex items-center gap-1">
             <button
-              onClick={onNewSession}
+              onClick={() => onNewSession(null)}
               className="text-neutral-400 hover:text-neutral-200 transition-colors p-2 rounded-lg hover:bg-neutral-800"
               title="New session"
             >
@@ -331,42 +619,57 @@ export default function SessionSidebar({
         </div>
 
         {/* リスト */}
-        <div className="flex-1 overflow-y-auto px-5 pb-4 space-y-1 sidebar-scroll">
+        <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-0.5 sidebar-scroll">
           {/* テンプレート */}
           {templates.length > 0 && (
             <>
-              <div className="text-[11px] text-amber-600 uppercase tracking-wider px-4 pt-3 pb-2 font-medium">
+              <div className="text-[11px] text-amber-600 uppercase tracking-wider px-3 pt-3 pb-2 font-medium">
                 Templates
               </div>
-              {templates.map(renderItem)}
-              <div className="my-3 h-px bg-neutral-800" />
+              {templates.map((s) => renderSessionItem(s))}
+              <div className="my-3 h-px bg-neutral-800 mx-2" />
             </>
           )}
 
-          {/* 通常セッション */}
-          <div className="text-[11px] text-neutral-500 uppercase tracking-wider px-4 pt-2 pb-2 font-medium">
-            Sessions
-          </div>
-          {regular.map(renderItem)}
+          {/* フォルダ */}
+          {rootFolders.map((f) => renderFolderTree(f))}
+
+          {/* Unfiled */}
+          {unfiled.length > 0 && (
+            <>
+              {rootFolders.length > 0 && (
+                <div className="my-2 h-px bg-neutral-800 mx-2" />
+              )}
+              <div className="text-[11px] text-neutral-500 uppercase tracking-wider px-3 pt-2 pb-2 font-medium">
+                Unfiled
+              </div>
+              {unfiled.map((s) => renderSessionItem(s))}
+            </>
+          )}
 
           {sessions.length === 0 && (
             <div className="text-sm text-neutral-600 text-center py-8">
               No sessions yet
             </div>
           )}
+
+          {/* New folder */}
+          <div className="pt-3 px-1">
+            <button
+              onClick={() => onNewFolder(null)}
+              className="w-full text-left px-3 py-2 text-xs text-neutral-600 hover:text-neutral-400 hover:bg-neutral-800/50 rounded-lg transition-colors"
+            >
+              + New folder
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* コンテキストメニュー（Portal） */}
-      {menuOpen && menuSession && (
+      {menuOpen && menuActions.length > 0 && (
         <ContextMenu
-          session={menuSession}
+          actions={menuActions}
           anchorRect={menuOpen.rect}
           onClose={closeMenu}
-          onRename={() => startRename(menuSession)}
-          onDuplicate={() => onDuplicateSession(menuSession.id)}
-          onToggleTemplate={() => onToggleTemplate(menuSession.id)}
-          onDelete={() => onDeleteSession(menuSession.id)}
         />
       )}
     </>

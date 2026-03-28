@@ -5,12 +5,15 @@ import { createPortal } from "react-dom";
 import {
   AppState,
   Session,
+  Folder,
   SiglaneState,
   PromptLine,
   parsePrompt,
   joinPromptLines,
   joinAllPromptLines,
   createSession,
+  createFolder,
+  canCreateSubfolder,
   duplicateSession,
   generateCopyLabel,
   adjustWeight,
@@ -46,18 +49,41 @@ function migrateFromLegacy(legacy: SiglaneState): AppState {
     negativeLines: legacy.negativeLines,
     memo: legacy.memo,
     updatedAt: new Date().toISOString(),
+    folderId: null,
   };
-  return { sessions: [session], activeSessionId: session.id };
+  return { sessions: [session], folders: [], activeSessionId: session.id };
+}
+
+// 既存AppStateにfolders/folderIdがない場合のマイグレーション
+function migrateAppState(state: AppState): AppState {
+  const needsFolders = !Array.isArray(state.folders);
+  const needsFolderId = state.sessions.some(
+    (s) => s.folderId === undefined,
+  );
+
+  if (!needsFolders && !needsFolderId) return state;
+
+  return {
+    ...state,
+    folders: needsFolders ? [] : state.folders,
+    sessions: needsFolderId
+      ? state.sessions.map((s) => ({
+          ...s,
+          folderId: s.folderId ?? null,
+        }))
+      : state.sessions,
+  };
 }
 
 function createInitialState(): AppState {
   const sample = createSampleSession();
-  return { sessions: [sample], activeSessionId: sample.id };
+  return { sessions: [sample], folders: [], activeSessionId: sample.id };
 }
 
 export default function Home() {
   const [appState, setAppState] = useState<AppState>({
     sessions: [],
+    folders: [],
     activeSessionId: "",
   });
   const [loaded, setLoaded] = useState(false);
@@ -75,7 +101,7 @@ export default function Home() {
       try {
         const parsed = JSON.parse(saved) as AppState;
         if (parsed.sessions && parsed.sessions.length > 0) {
-          setAppState(parsed);
+          setAppState(migrateAppState(parsed));
           setLoaded(true);
           return;
         }
@@ -132,11 +158,12 @@ export default function Home() {
   );
 
   // --- セッション管理 ---
-  const handleNewSession = () => {
+  const handleNewSession = (folderId?: string | null) => {
     const existingLabels = appState.sessions.map((s) => s.label);
     const label = generateCopyLabel("New session", existingLabels);
-    const session = createSession(label);
+    const session = createSession(label, folderId ?? null);
     setAppState((prev) => ({
+      ...prev,
       sessions: [...prev.sessions, session],
       activeSessionId: session.id,
     }));
@@ -153,6 +180,7 @@ export default function Home() {
     const newLabel = generateCopyLabel(source.label, existingLabels);
     const copy = duplicateSession(source, newLabel);
     setAppState((prev) => ({
+      ...prev,
       sessions: [...prev.sessions, copy],
       activeSessionId: copy.id,
     }));
@@ -163,11 +191,11 @@ export default function Home() {
       const remaining = prev.sessions.filter((s) => s.id !== id);
       if (remaining.length === 0) {
         const fresh = createSession("New session");
-        return { sessions: [fresh], activeSessionId: fresh.id };
+        return { ...prev, sessions: [fresh], activeSessionId: fresh.id };
       }
       const newActiveId =
         prev.activeSessionId === id ? remaining[0].id : prev.activeSessionId;
-      return { sessions: remaining, activeSessionId: newActiveId };
+      return { ...prev, sessions: remaining, activeSessionId: newActiveId };
     });
   };
 
@@ -198,8 +226,68 @@ export default function Home() {
     const newLabel = generateCopyLabel(template.label, existingLabels);
     const copy = duplicateSession(template, newLabel);
     setAppState((prev) => ({
+      ...prev,
       sessions: [...prev.sessions, copy],
       activeSessionId: copy.id,
+    }));
+  };
+
+  // --- フォルダ管理 ---
+  const handleNewFolder = (parentId: string | null) => {
+    if (parentId !== null && !canCreateSubfolder(parentId, appState.folders)) {
+      return;
+    }
+    const existingLabels = appState.folders.map((f) => f.label);
+    const label = generateCopyLabel("New folder", existingLabels);
+    const maxOrder = appState.folders
+      .filter((f) => f.parentId === parentId)
+      .reduce((max, f) => Math.max(max, f.order), -1);
+    const folder = createFolder(label, parentId, maxOrder + 1);
+    setAppState((prev) => ({
+      ...prev,
+      folders: [...prev.folders, folder],
+    }));
+  };
+
+  const handleRenameFolder = (id: string, newLabel: string) => {
+    setAppState((prev) => ({
+      ...prev,
+      folders: prev.folders.map((f) =>
+        f.id === id ? { ...f, label: newLabel } : f,
+      ),
+    }));
+  };
+
+  const handleDeleteFolder = (id: string) => {
+    setAppState((prev) => {
+      // 削除対象のフォルダ + その子サブフォルダのIDを収集
+      const idsToDelete = new Set<string>();
+      idsToDelete.add(id);
+      for (const f of prev.folders) {
+        if (f.parentId === id) idsToDelete.add(f.id);
+      }
+
+      return {
+        ...prev,
+        folders: prev.folders.filter((f) => !idsToDelete.has(f.id)),
+        // フォルダ内のセッションはUnfiledに戻す
+        sessions: prev.sessions.map((s) =>
+          s.folderId && idsToDelete.has(s.folderId)
+            ? { ...s, folderId: null }
+            : s,
+        ),
+      };
+    });
+  };
+
+  const handleMoveSession = (sessionId: string, folderId: string | null) => {
+    setAppState((prev) => ({
+      ...prev,
+      sessions: prev.sessions.map((s) =>
+        s.id === sessionId
+          ? { ...s, folderId, updatedAt: new Date().toISOString() }
+          : s,
+      ),
     }));
   };
 
@@ -388,6 +476,7 @@ export default function Home() {
       {/* 左サイドバー */}
       <SessionSidebar
         sessions={appState.sessions}
+        folders={appState.folders}
         activeSessionId={appState.activeSessionId}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
@@ -398,6 +487,10 @@ export default function Home() {
         onRenameSession={handleRenameSession}
         onToggleTemplate={handleToggleTemplate}
         onOpenFromTemplate={handleOpenFromTemplate}
+        onMoveSession={handleMoveSession}
+        onNewFolder={handleNewFolder}
+        onRenameFolder={handleRenameFolder}
+        onDeleteFolder={handleDeleteFolder}
       />
 
       {/* メインエディタ */}
