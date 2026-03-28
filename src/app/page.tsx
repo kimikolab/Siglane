@@ -28,6 +28,7 @@ import {
   parseComfyWorkflow,
   writePromptsToWorkflow,
   isParseError,
+  formatGenerationParams,
 } from "@/utils/comfyWorkflow";
 
 const STORAGE_KEY = "siglane-app-state";
@@ -315,6 +316,7 @@ export default function Home() {
           ...s,
           positiveLines: parsePrompt(result.positivePrompt),
           negativeLines: parsePrompt(result.negativePrompt),
+          memo: formatGenerationParams(result.generationParams),
           comfyWorkflow: json,
           comfyPositiveNodeId: result.positiveNodeId,
           comfyNegativeNodeId: result.negativeNodeId,

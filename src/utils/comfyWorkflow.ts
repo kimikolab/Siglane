@@ -31,11 +31,24 @@ interface ComfyWorkflow {
   [key: string]: unknown;
 }
 
+export interface ComfyGenerationParams {
+  seed?: number;
+  steps?: number;
+  cfg?: number;
+  samplerName?: string;
+  scheduler?: string;
+  denoise?: number;
+  modelName?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface ComfyParseResult {
   positiveNodeId: number;
   negativeNodeId: number;
   positivePrompt: string;
   negativePrompt: string;
+  generationParams: ComfyGenerationParams;
 }
 
 // --- 解析 ---
@@ -54,6 +67,54 @@ function findSamplerNode(workflow: ComfyWorkflow): ComfyNode | null {
         ),
     ) ?? null
   );
+}
+
+// KSampler系ノードから生成パラメータを抽出
+// widgets_values: [seed, control_after_generate, steps, cfg, sampler_name, scheduler, denoise]
+function extractSamplerParams(node: ComfyNode): Partial<ComfyGenerationParams> {
+  const v = node.widgets_values;
+  if (!v || v.length < 7) return {};
+  return {
+    seed: typeof v[0] === "number" ? v[0] : undefined,
+    steps: typeof v[2] === "number" ? v[2] : undefined,
+    cfg: typeof v[3] === "number" ? v[3] : undefined,
+    samplerName: typeof v[4] === "string" ? v[4] : undefined,
+    scheduler: typeof v[5] === "string" ? v[5] : undefined,
+    denoise: typeof v[6] === "number" ? v[6] : undefined,
+  };
+}
+
+// CheckpointLoaderSimpleからモデル名を抽出
+function extractModelName(workflow: ComfyWorkflow): string | undefined {
+  const loader = workflow.nodes.find(
+    (n) => n.type === "CheckpointLoaderSimple" || n.type === "CheckpointLoader",
+  );
+  if (!loader?.widgets_values?.[0]) return undefined;
+  return String(loader.widgets_values[0]);
+}
+
+// EmptyLatentImageから画像サイズを抽出
+function extractImageSize(workflow: ComfyWorkflow): { width?: number; height?: number } {
+  const node = workflow.nodes.find((n) => n.type === "EmptyLatentImage");
+  if (!node?.widgets_values || node.widgets_values.length < 2) return {};
+  return {
+    width: typeof node.widgets_values[0] === "number" ? node.widgets_values[0] : undefined,
+    height: typeof node.widgets_values[1] === "number" ? node.widgets_values[1] : undefined,
+  };
+}
+
+// 生成パラメータをメモ用テキストに変換
+export function formatGenerationParams(params: ComfyGenerationParams): string {
+  const parts: string[] = [];
+  if (params.modelName) parts.push(`model: ${params.modelName}`);
+  if (params.seed !== undefined) parts.push(`seed: ${params.seed}`);
+  if (params.steps !== undefined) parts.push(`steps: ${params.steps}`);
+  if (params.cfg !== undefined) parts.push(`cfg: ${params.cfg}`);
+  if (params.samplerName) parts.push(`sampler: ${params.samplerName}`);
+  if (params.scheduler) parts.push(`scheduler: ${params.scheduler}`);
+  if (params.width && params.height) parts.push(`size: ${params.width}x${params.height}`);
+  if (params.denoise !== undefined && params.denoise !== 1) parts.push(`denoise: ${params.denoise}`);
+  return parts.join(" / ");
 }
 
 // link_idからソースノードIDを取得
@@ -111,6 +172,11 @@ export function parseComfyWorkflow(
     negativeNodeId: negNodeId,
     positivePrompt: getPromptText(workflow, posNodeId),
     negativePrompt: getPromptText(workflow, negNodeId),
+    generationParams: {
+      ...extractSamplerParams(sampler),
+      ...extractImageSize(workflow),
+      modelName: extractModelName(workflow),
+    },
   };
 }
 
