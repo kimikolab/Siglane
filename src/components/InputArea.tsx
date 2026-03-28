@@ -16,7 +16,7 @@ interface InputAreaProps {
 
 export default function InputArea({
   label,
-  labelColor = "text-neutral-500",
+  labelColor = "text-neutral-300",
   rows = 3, // ← 追加（デフォルト3）
   allText,
   copyText,

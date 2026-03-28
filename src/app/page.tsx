@@ -125,8 +125,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-neutral-900 text-neutral-100">
       <div className="max-w-4xl mx-auto p-6">
-        <h1 className="text-xl font-medium mb-6 text-neutral-300">Siglane</h1>
-
         {/* テキストエリア（P/N横並び） */}
         <div className="space-y-4 mb-6">
           <InputArea
@@ -139,7 +137,7 @@ export default function Home() {
           <InputArea
             label="Negative"
             rows={2}
-            labelColor="text-amber-600"
+            labelColor="text-amber-800"
             allText={negativeAllText}
             copyText={negativeCopyText}
             onSync={handleSyncNegative}

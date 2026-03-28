@@ -56,7 +56,7 @@ export default function PromptLineList({
         items={lines.map((l) => l.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-0.5">
           {lines.map((line) => (
             <PromptLineItem
               key={line.id}

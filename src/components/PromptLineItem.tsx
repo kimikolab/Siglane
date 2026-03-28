@@ -41,7 +41,7 @@ export default function PromptLineItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-2 px-3 py-2 bg-neutral-800 rounded-lg border border-neutral-700 transition-opacity ${
+      className={`flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800 rounded border border-neutral-700/60 transition-opacity ${
         line.enabled ? "opacity-100" : "opacity-40"
       }`}
     >
@@ -49,9 +49,11 @@ export default function PromptLineItem({
       <span
         {...attributes}
         {...listeners}
-        className="text-neutral-600 cursor-grab active:cursor-grabbing select-none"
+        className="flex flex-col gap-[3px] py-1 px-0.5 cursor-grab active:cursor-grabbing select-none group"
       >
-        ⠿
+        <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover:bg-neutral-400 transition-colors" />
+        <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover:bg-neutral-400 transition-colors" />
+        <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover:bg-neutral-400 transition-colors" />
       </span>
 
       <button
@@ -91,7 +93,7 @@ export default function PromptLineItem({
         <span
           onClick={() => setIsEditing(true)}
           className={`flex-1 text-sm font-mono cursor-text ${
-            line.enabled ? "text-neutral-200" : "text-neutral-500 line-through"
+            line.enabled ? "text-neutral-100" : "text-neutral-500 line-through"
           }`}
         >
           {line.text}

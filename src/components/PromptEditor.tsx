@@ -28,8 +28,8 @@ export default function PromptEditor({
 }: PromptEditorProps) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs text-neutral-500 uppercase tracking-wider">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs text-neutral-300 uppercase tracking-wider">
           Positive prompt
         </span>
         <div className="flex-1 h-px bg-neutral-700" />
@@ -46,8 +46,8 @@ export default function PromptEditor({
         }
       />
 
-      <div className="flex items-center gap-2 mt-6 mb-3">
-        <span className="text-xs text-amber-600 uppercase tracking-wider">
+      <div className="flex items-center gap-2 mt-4 mb-2">
+        <span className="text-xs text-amber-800 uppercase tracking-wider">
           Negative prompt
         </span>
         <div className="flex-1 h-px bg-neutral-700" />
