@@ -13,11 +13,14 @@ import {
   createSession,
   duplicateSession,
   generateCopyLabel,
+  adjustWeight,
+  setWeight,
 } from "@/types";
 import InputArea from "@/components/InputArea";
 import PromptEditor from "@/components/PromptEditor";
 import MemoBox from "@/components/MemoBox";
 import SessionSidebar from "@/components/SessionSidebar";
+import { WeightMode } from "@/components/PromptLineItem";
 
 const STORAGE_KEY = "siglane-app-state";
 const LEGACY_STORAGE_KEY = "siglane-state";
@@ -62,6 +65,7 @@ export default function Home() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isRenamingHeader, setIsRenamingHeader] = useState(false);
   const [headerRenameValue, setHeaderRenameValue] = useState("");
+  const [weightMode, setWeightMode] = useState<WeightMode>("combined");
   const isInitial = useRef(true);
 
   // --- localStorage読み込み ---
@@ -311,6 +315,35 @@ export default function Home() {
     updateActiveSession((s) => ({ ...s, memo }));
   };
 
+  // --- 重み操作 ---
+  const handleWeightChange = (
+    type: "positive" | "negative",
+    id: string,
+    delta: number
+  ) => {
+    const key = type === "positive" ? "positiveLines" : "negativeLines";
+    updateActiveSession((s) => ({
+      ...s,
+      [key]: (s[key] as PromptLine[]).map((line) =>
+        line.id === id ? { ...line, text: adjustWeight(line.text, delta) } : line
+      ),
+    }));
+  };
+
+  const handleWeightSet = (
+    type: "positive" | "negative",
+    id: string,
+    weight: number
+  ) => {
+    const key = type === "positive" ? "positiveLines" : "negativeLines";
+    updateActiveSession((s) => ({
+      ...s,
+      [key]: (s[key] as PromptLine[]).map((line) =>
+        line.id === id ? { ...line, text: setWeight(line.text, weight) } : line
+      ),
+    }));
+  };
+
   // --- ヘルプオーバーレイ ---
   const [showHelp, setShowHelp] = useState(false);
 
@@ -415,8 +448,25 @@ export default function Home() {
               )}
             </div>
 
-            {/* 右: ショートカット + 保存状態 */}
+            {/* 右: 重みモード + ショートカット + 保存状態 */}
             <div className="flex items-center gap-4 flex-shrink-0 pt-1">
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-neutral-600">Weight</span>
+                <button
+                  onClick={() =>
+                    setWeightMode((m) => (m === "combined" ? "none" : "combined"))
+                  }
+                  className={`w-7 h-[16px] rounded-full relative transition-colors ${
+                    weightMode === "combined" ? "bg-sky-600" : "bg-neutral-600"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-[2px] w-[12px] h-[12px] rounded-full bg-white transition-all ${
+                      weightMode === "combined" ? "right-[2px]" : "left-[2px]"
+                    }`}
+                  />
+                </button>
+              </div>
               <button
                 onClick={() => setShowHelp(true)}
                 className="text-xs text-neutral-600 hover:text-neutral-400 transition-colors"
@@ -462,12 +512,15 @@ export default function Home() {
                   <PromptEditor
                     positiveLines={activeSession.positiveLines}
                     negativeLines={activeSession.negativeLines}
+                    weightMode={weightMode}
                     onToggle={handleToggle}
                     onDelete={handleDelete}
                     onUpdate={handleUpdate}
                     onAdd={handleAdd}
                     onDuplicate={handleDuplicate}
                     onReorder={handleReorder}
+                    onWeightChange={handleWeightChange}
+                    onWeightSet={handleWeightSet}
                   />
                 </div>
 

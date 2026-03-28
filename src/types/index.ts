@@ -91,6 +91,90 @@ export function generateCopyLabel(
   return candidate;
 }
 
+// --- 重みユーティリティ ---
+
+// テキストから重み値を抽出
+// (tag:1.2) → 1.2, tag → 1.0, ((tag)) → 1.0
+const WEIGHT_PATTERN = /^\((.+):(\d+\.?\d*)\)$/;
+
+export function extractWeight(text: string): number {
+  const match = text.match(WEIGHT_PATTERN);
+  return match ? parseFloat(match[2]) : 1.0;
+}
+
+// テキスト内の重みを新しい値に設定
+export function setWeight(text: string, weight: number): string {
+  const rounded = Math.round(weight * 100) / 100;
+  const match = text.match(WEIGHT_PATTERN);
+
+  if (match) {
+    const content = match[1];
+    // 1.0に戻す場合は括弧を外す
+    if (rounded === 1.0) return content;
+    return `(${content}:${rounded})`;
+  }
+
+  // 括弧なしテキスト
+  if (rounded === 1.0) return text;
+  return `(${text}:${rounded})`;
+}
+
+// 特殊な重み記法を使っているか判定
+// 多重括弧 ((tag)), 数値なし括弧 (tag), 角括弧 [tag] [tag:0.8] など
+// これらはスライダーで操作すると壊れるため、対象外にする
+export function hasSpecialWeightSyntax(text: string): boolean {
+  const t = text.trim();
+  // 多重括弧: ((tag)) or more
+  if (/^\(\(.+\)\)$/.test(t)) return true;
+  // 数値なし単一括弧: (tag) — SD1.5の1.1倍記法
+  // ただし (tag:1.2) は通常記法なので除外
+  if (/^\([^()]+\)$/.test(t) && !WEIGHT_PATTERN.test(t)) return true;
+  // 角括弧: [tag] or [tag:0.8]
+  if (/^\[.+\]$/.test(t)) return true;
+  return false;
+}
+
+// 特殊記法の実効重みを計算
+// (tag) = 1.1, ((tag)) = 1.21, [tag] = 0.91, [tag:0.8] = 0.8
+export function calcSpecialWeight(text: string): number | null {
+  const t = text.trim();
+
+  // 多重丸括弧: 外側から括弧の深さを数える
+  if (/^\(+[^()]+\)+$/.test(t)) {
+    let depth = 0;
+    for (const ch of t) {
+      if (ch === "(") depth++;
+      else break;
+    }
+    return Math.round(Math.pow(1.1, depth) * 100) / 100;
+  }
+
+  // 丸括弧（中にカンマなど含む）: (indoors, night) → 1.1
+  if (/^\([^()]+\)$/.test(t) && !WEIGHT_PATTERN.test(t)) {
+    return 1.1;
+  }
+
+  // 角括弧 + 明示的数値: [tag:0.8]
+  const bracketWeight = t.match(/^\[.+:(\d+\.?\d*)\]$/);
+  if (bracketWeight) {
+    return parseFloat(bracketWeight[1]);
+  }
+
+  // 角括弧のみ: [tag] → 1/1.1
+  if (/^\[[^\]]+\]$/.test(t)) {
+    return Math.round((1 / 1.1) * 100) / 100;
+  }
+
+  return null;
+}
+
+// 重みをdelta分だけ増減
+export function adjustWeight(text: string, delta: number): string {
+  const current = extractWeight(text);
+  const newWeight = Math.max(0, Math.min(2.0, current + delta));
+  return setWeight(text, newWeight);
+}
+
 // --- パーサー ---
 
 // カンマ区切りテキストをPromptLine[]に変換するパーサー

@@ -2,10 +2,12 @@
 
 import { PromptLine } from "@/types";
 import PromptLineList from "./PromptLineList";
+import { WeightMode } from "./PromptLineItem";
 
 interface PromptEditorProps {
   positiveLines: PromptLine[];
   negativeLines: PromptLine[];
+  weightMode: WeightMode;
   onToggle: (type: "positive" | "negative", id: string) => void;
   onDelete: (type: "positive" | "negative", id: string) => void;
   onUpdate: (type: "positive" | "negative", id: string, text: string) => void;
@@ -16,17 +18,22 @@ interface PromptEditorProps {
     activeId: string,
     overId: string,
   ) => void;
+  onWeightChange: (type: "positive" | "negative", id: string, delta: number) => void;
+  onWeightSet: (type: "positive" | "negative", id: string, weight: number) => void;
 }
 
 export default function PromptEditor({
   positiveLines,
   negativeLines,
+  weightMode,
   onToggle,
   onDelete,
   onUpdate,
   onAdd,
   onDuplicate,
   onReorder,
+  onWeightChange,
+  onWeightSet,
 }: PromptEditorProps) {
   return (
     <div>
@@ -39,6 +46,7 @@ export default function PromptEditor({
 
       <PromptLineList
         lines={positiveLines}
+        weightMode={weightMode}
         onToggle={(id) => onToggle("positive", id)}
         onDelete={(id) => onDelete("positive", id)}
         onUpdate={(id, text) => onUpdate("positive", id, text)}
@@ -47,6 +55,8 @@ export default function PromptEditor({
         onReorder={(activeId, overId) =>
           onReorder("positive", activeId, overId)
         }
+        onWeightChange={(id, delta) => onWeightChange("positive", id, delta)}
+        onWeightSet={(id, weight) => onWeightSet("positive", id, weight)}
       />
 
       <div className="flex items-center gap-2 mt-4 mb-2">
@@ -58,6 +68,7 @@ export default function PromptEditor({
 
       <PromptLineList
         lines={negativeLines}
+        weightMode={weightMode}
         onToggle={(id) => onToggle("negative", id)}
         onDelete={(id) => onDelete("negative", id)}
         onUpdate={(id, text) => onUpdate("negative", id, text)}
@@ -66,6 +77,8 @@ export default function PromptEditor({
         onReorder={(activeId, overId) =>
           onReorder("negative", activeId, overId)
         }
+        onWeightChange={(id, delta) => onWeightChange("negative", id, delta)}
+        onWeightSet={(id, weight) => onWeightSet("negative", id, weight)}
       />
     </div>
   );
