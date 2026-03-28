@@ -502,6 +502,27 @@ export default function Home() {
             <div className="min-w-0 flex-1">
               {activeSession && (
                 <div className="flex flex-col gap-1">
+                  {/* フォルダパス */}
+                  {(() => {
+                    if (!activeSession.folderId) return null;
+                    const folder = appState.folders.find(
+                      (f) => f.id === activeSession.folderId,
+                    );
+                    if (!folder) return null;
+                    const parts: string[] = [];
+                    if (folder.parentId) {
+                      const parent = appState.folders.find(
+                        (f) => f.id === folder.parentId,
+                      );
+                      if (parent) parts.push(parent.label);
+                    }
+                    parts.push(folder.label);
+                    return (
+                      <span className="text-xs text-neutral-500 truncate">
+                        {parts.join(" / ")}
+                      </span>
+                    );
+                  })()}
                   {isRenamingHeader ? (
                     <input
                       type="text"
