@@ -16,6 +16,10 @@ export interface Session {
   memo: string;
   updatedAt: string;
   folderId: string | null;
+  // ComfyUI連携（オプショナル）
+  comfyWorkflow?: unknown;
+  comfyPositiveNodeId?: number;
+  comfyNegativeNodeId?: number;
 }
 
 // フォルダ（2階層まで: root → subfolder）

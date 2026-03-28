@@ -24,6 +24,11 @@ import PromptEditor from "@/components/PromptEditor";
 import MemoBox from "@/components/MemoBox";
 import SessionSidebar from "@/components/SessionSidebar";
 import { WeightMode } from "@/components/PromptLineItem";
+import {
+  parseComfyWorkflow,
+  writePromptsToWorkflow,
+  isParseError,
+} from "@/utils/comfyWorkflow";
 
 const STORAGE_KEY = "siglane-app-state";
 const LEGACY_STORAGE_KEY = "siglane-state";
@@ -289,6 +294,67 @@ export default function Home() {
           : s,
       ),
     }));
+  };
+
+  // --- ComfyUI連携 ---
+  const comfyFileRef = useRef<HTMLInputElement>(null);
+
+  const handleImportComfyWorkflow = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = JSON.parse(e.target?.result as string);
+        const result = parseComfyWorkflow(json);
+
+        if (isParseError(result)) {
+          alert(`Workflow import failed: ${result.error}`);
+          return;
+        }
+
+        updateActiveSession((s) => ({
+          ...s,
+          positiveLines: parsePrompt(result.positivePrompt),
+          negativeLines: parsePrompt(result.negativePrompt),
+          comfyWorkflow: json,
+          comfyPositiveNodeId: result.positiveNodeId,
+          comfyNegativeNodeId: result.negativeNodeId,
+        }));
+      } catch {
+        alert("Failed to parse JSON file");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleExportComfyWorkflow = () => {
+    if (
+      !activeSession?.comfyWorkflow ||
+      activeSession.comfyPositiveNodeId === undefined ||
+      activeSession.comfyNegativeNodeId === undefined
+    ) {
+      return;
+    }
+
+    const positiveText = joinPromptLines(activeSession.positiveLines);
+    const negativeText = joinPromptLines(activeSession.negativeLines);
+
+    const exported = writePromptsToWorkflow(
+      activeSession.comfyWorkflow,
+      activeSession.comfyPositiveNodeId,
+      activeSession.comfyNegativeNodeId,
+      positiveText,
+      negativeText,
+    );
+
+    const blob = new Blob([JSON.stringify(exported, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${activeSession.label}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // --- ヘッダーリネーム ---
@@ -557,6 +623,36 @@ export default function Home() {
                     <span className="text-[10px] text-amber-600 uppercase tracking-wider bg-amber-900/20 px-2 py-0.5 rounded w-fit">
                       Template — read only
                     </span>
+                  )}
+                  {/* ComfyUI連携 */}
+                  {!isTemplateActive && (
+                    <div className="flex items-center gap-3 mt-1">
+                      <input
+                        ref={comfyFileRef}
+                        type="file"
+                        accept=".json"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleImportComfyWorkflow(file);
+                          e.target.value = "";
+                        }}
+                      />
+                      <button
+                        onClick={() => comfyFileRef.current?.click()}
+                        className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
+                      >
+                        Import workflow
+                      </button>
+                      {activeSession?.comfyWorkflow != null && (
+                        <button
+                          onClick={handleExportComfyWorkflow}
+                          className="text-[11px] text-sky-600 hover:text-sky-400 transition-colors"
+                        >
+                          Export for ComfyUI
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
