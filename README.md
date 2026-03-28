@@ -34,16 +34,19 @@ Shift from **writing** prompts to **operating** them.
 - Drag-and-drop reordering
 - Toggle each line ON/OFF
 - Line duplicate (Ctrl+D / ⌘+D)
-- Weight notation support (e.g. `(tag:1.2)`)
+- Weight control — slider + ±buttons + direct number input
+- Special weight syntax detection — `((tag))`, `(tag)`, `[tag:0.8]` show effective weight (read-only)
 - Positive / Negative prompt management
 - Reconstructed prompt display with one-click copy
 - Memo field for generation parameters (seed, cfg, etc.)
+- Session management — multiple sessions with create, rename, duplicate, delete
+- Templates — lock a session as read-only, click to create a working copy
+- Collapsible sidebar
 - Auto-save via localStorage
 
 ### v2 (Planned)
 
 - Prompt dictionary (register, browse, one-click insert)
-- Weight slider
 - JSON export / import
 
 ### Future
@@ -94,7 +97,7 @@ Siglane is not just a prompt formatter — it is an environment for treating pro
 
 ## Data Storage
 
-- Auto-save via localStorage
+- Auto-save all sessions via localStorage
 - Future: JSON export / import, cloud sync
 
 ---
