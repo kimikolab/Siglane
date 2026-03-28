@@ -18,14 +18,7 @@ masterpiece, best quality, 1girl, smile, blue hair, (soft lighting:1.2)
 
 Siglaneはこれを行単位に分解し、構造として扱えるようにします。
 
-```
-masterpiece
-best quality
-1girl
-smile
-blue hair
-(soft lighting:1.2)
-```
+![Siglane screenshot](docs/screenshot.png)
 
 プロンプトを「書く」から「操作する」へ。
 

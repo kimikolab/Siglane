@@ -18,14 +18,7 @@ masterpiece, best quality, 1girl, smile, blue hair, (soft lighting:1.2)
 
 Siglane breaks them down into structured, editable lines:
 
-```
-masterpiece
-best quality
-1girl
-smile
-blue hair
-(soft lighting:1.2)
-```
+![Siglane screenshot](docs/screenshot.png)
 
 Shift from **writing** prompts to **operating** them.
 
