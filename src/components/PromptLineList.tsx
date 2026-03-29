@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   DndContext,
   closestCenter,
@@ -73,11 +73,25 @@ export default function PromptLineList({
     setNewGroupName("");
   }, []);
 
+  // --- Shiftキー追跡（イベントバブリングに依存しない） ---
+  const shiftHeld = useRef(false);
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => { if (e.key === "Shift") shiftHeld.current = true; };
+    const up = (e: KeyboardEvent) => { if (e.key === "Shift") shiftHeld.current = false; };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+
   const handleSelect = useCallback(
-    (id: string, shiftKey: boolean) => {
+    (id: string, _shiftKey: boolean) => {
+      const isShift = shiftHeld.current;
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        if (shiftKey && lastSelectedId.current) {
+        if (isShift && lastSelectedId.current) {
           const lastIdx = lines.findIndex(
             (l) => l.id === lastSelectedId.current,
           );
@@ -117,7 +131,8 @@ export default function PromptLineList({
   const pointerSensor = useSensor(PointerSensor, {
     activationConstraint: { distance: 5 },
   });
-  const sensors = useSensors(isSelectMode ? undefined : pointerSensor);
+  const normalSensors = useSensors(pointerSensor);
+  const emptySensors = useSensors();
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -177,6 +192,21 @@ export default function PromptLineList({
           <span className="text-xs text-neutral-300">
             {selectedIds.size} selected
           </span>
+          {/* Select All / Deselect All */}
+          <button
+            onClick={() =>
+              setSelectedIds(new Set(lines.map((l) => l.id)))
+            }
+            className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
+          >
+            All
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
+          >
+            None
+          </button>
           <div className="flex-1" />
           {/* Set Group */}
           <div className="relative">
@@ -273,7 +303,7 @@ export default function PromptLineList({
 
       {/* 行リスト */}
       <DndContext
-        sensors={sensors}
+        sensors={isSelectMode ? emptySensors : normalSensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
