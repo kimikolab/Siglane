@@ -520,6 +520,12 @@ export default function Home() {
 
   useEffect(() => {
     const handleGlobalKey = (e: KeyboardEvent) => {
+      // Ctrl+Enter: Generate
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleGenerateRef.current();
+        return;
+      }
       if (
         (e.key === "?" || (e.key === "/" && e.shiftKey)) &&
         !e.ctrlKey &&
@@ -669,6 +675,12 @@ export default function Home() {
     },
     [],
   );
+
+  // handleGenerateの最新参照をrefで保持（useEffect内から呼ぶため）
+  const handleGenerateRef = useRef(handleGenerate);
+  useEffect(() => {
+    handleGenerateRef.current = handleGenerate;
+  }, [handleGenerate]);
 
   const positiveAllText = activeSession
     ? joinAllPromptLines(activeSession.positiveLines)
@@ -821,8 +833,8 @@ export default function Home() {
                     }`}
                     title={
                       activeSession?.comfyApiWorkflow
-                        ? "Send to ComfyUI"
-                        : "Click to load an API workflow"
+                        ? "Send to ComfyUI (Ctrl+Enter)"
+                        : "Click to load an API workflow (Ctrl+Enter)"
                     }
                   >
                     {isGenerating ? "Sending..." : "Generate"}
@@ -1007,6 +1019,12 @@ export default function Home() {
                   <span className="text-neutral-400">Show this help</span>
                   <kbd className="text-neutral-300 bg-neutral-700 px-1.5 py-0.5 rounded text-xs font-mono">
                     ?
+                  </kbd>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-400">Generate (ComfyUI)</span>
+                  <kbd className="text-neutral-300 bg-neutral-700 px-1.5 py-0.5 rounded text-xs font-mono">
+                    Ctrl+Enter
                   </kbd>
                 </div>
               </div>
