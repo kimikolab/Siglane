@@ -638,9 +638,9 @@ export default function Home() {
       });
 
       setShowGroupDropdown(false);
-      exitSelectMode();
+      setSelectedLineIds(new Set());
     },
-    [activeSession, selectedLineIds, updateActiveSession, exitSelectMode],
+    [activeSession, selectedLineIds, updateActiveSession],
   );
 
   const handleBulkToggle = useCallback(
@@ -655,9 +655,9 @@ export default function Home() {
           selectedLineIds.has(l.id) ? { ...l, enabled } : l,
         ),
       }));
-      exitSelectMode();
+      setSelectedLineIds(new Set());
     },
-    [selectedLineIds, updateActiveSession, exitSelectMode],
+    [selectedLineIds, updateActiveSession],
   );
 
   useEffect(() => {
@@ -1405,7 +1405,7 @@ export default function Home() {
                                     : l,
                                 ),
                               }));
-                              exitSelectMode();
+                              setSelectedLineIds(new Set());
                             }}
                             disabled={selectedLineIds.size === 0}
                             className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-400 rounded transition-colors disabled:opacity-40"
@@ -1422,8 +1422,12 @@ export default function Home() {
                       ) : (
                         <button
                           onClick={() => setIsSelectMode(true)}
-                          className="text-xs text-neutral-600 hover:text-neutral-400 transition-colors"
+                          className="flex items-center gap-1 text-xs text-neutral-500 hover:text-neutral-300 bg-neutral-800 hover:bg-neutral-700 px-2.5 py-1 rounded transition-colors"
                         >
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <rect x="1" y="1" width="5" height="5" rx="1" />
+                            <path d="M10 3h5M10 8h5M10 13h5M1 10h5" />
+                          </svg>
                           Select
                         </button>
                       )}

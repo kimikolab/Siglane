@@ -99,13 +99,13 @@ export default function PromptLineItem({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-1"
-      onClick={handleRowClick}
+      className={`flex items-center gap-1 ${isSelectMode ? "select-none" : ""}`}
     >
       {/* 行本体（枠付き） */}
       <div
         tabIndex={-1}
         onKeyDown={handleKeyDown}
+        onClick={isSelectMode ? handleRowClick : undefined}
         className={`flex-1 flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800 rounded border transition-opacity focus:outline-none min-w-0 ${
           isSelectMode && isSelected
             ? "border-sky-500/60 bg-sky-900/20"
@@ -143,12 +143,15 @@ export default function PromptLineItem({
           </span>
         )}
 
-        {/* ON/OFFトグル */}
+        {/* ON/OFFトグル（選択モード中は無効化） */}
         <button
-          onClick={() => onToggle(line.id)}
+          onClick={(e) => {
+            if (isSelectMode) { e.stopPropagation(); return; }
+            onToggle(line.id);
+          }}
           className={`w-8 h-[18px] rounded-full relative transition-colors flex-shrink-0 ${
             line.enabled ? "bg-green-600" : "bg-neutral-600"
-          }`}
+          } ${isSelectMode ? "pointer-events-none" : ""}`}
         >
           <span
             className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
@@ -214,7 +217,7 @@ export default function PromptLineItem({
 
         {/* グループバッジ */}
         {groupLabel && !isEditing && (
-          <span className="text-[10px] text-neutral-500 bg-neutral-700/50 px-1.5 py-0.5 rounded flex-shrink-0">
+          <span className="text-[10px] text-sky-400/70 bg-sky-900/30 border border-sky-800/30 px-1.5 py-0.5 rounded flex-shrink-0">
             {groupLabel}
           </span>
         )}
