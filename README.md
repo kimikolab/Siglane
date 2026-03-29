@@ -44,18 +44,27 @@ Shift from **writing** prompts to **operating** them.
 - Folder system — 2-level nesting (project → character → sessions), context menu with Move to / New subfolder, folder path breadcrumb in header
 - Collapsible sidebar with delete confirmation dialogs
 - ComfyUI workflow import/export — import a workflow JSON to auto-extract P/N prompts and generation params (seed, steps, cfg, model, etc.), edit in Siglane, export with prompts written back
+- ComfyUI API integration — import API format workflow, send prompts directly to ComfyUI via `/prompt` endpoint (Ctrl+Enter shortcut)
+- Generation parameter panel — edit seed (random/fixed), cfg, steps, sampler, scheduler, denoise directly in Siglane without switching to ComfyUI
+- Connection settings — configurable ComfyUI server URL with connection test
+- Prompt line grouping — assign lines to categories (Quality, Character, Hair, Clothing, etc.) via multi-select mode
+- Per-section select mode — independent selection for Positive/Negative with action bar (Set Group, ON/OFF, Ungroup, All/None)
 - Auto-save via localStorage
 
 ### v2 (Planned)
 
 - Prompt dictionary (register, browse, one-click insert)
+- Group presets (save/replace groups like Clothing sets)
+- Outline view — group-based structural view with bulk operations
 - JSON export / import
-- ComfyUI API integration for direct generation
 
 ### Future
 
 - Prompt history and diff comparison
-- Image attachment per session
+- Image display — receive generated images via WebSocket, attach to sessions
+- img2img workflow support — image upload area for LoadImage nodes
+- Tag search and related session discovery
+- Co-occurrence analysis — find commonly paired prompt elements
 - Browser extension
 - Local bridge for external tool integration
 
@@ -74,8 +83,9 @@ Siglane is not just a prompt formatter — it is an environment for treating pro
 
 ### Goals
 
-- **MVP** — Make prompt editing comfortable
-- **v2** — Turn prompts into reusable assets
+- **MVP** ✅ — Make prompt editing comfortable
+- **v1.5** ✅ — Direct generation from Siglane + prompt grouping
+- **v2** — Turn prompts into reusable assets (dictionary + presets)
 - **Future** — Become a prompt research environment
 
 ---
@@ -89,6 +99,9 @@ Siglane is not just a prompt formatter — it is an environment for treating pro
 - Manage prompts by project/character with folders
 - Record successful generation results — prompts + parameters in one session
 - Round-trip editing with ComfyUI via workflow JSON import/export
+- Direct generation from Siglane — edit prompts, tweak cfg/steps/sampler, hit Generate
+- Group prompt lines by role (Clothing, Hair, Expression) for quick identification and bulk operations
+- Swap entire groups (e.g. replace formal outfit with casual) without manual line-by-line editing
 
 ---
 
@@ -114,6 +127,19 @@ Siglane is not just a prompt formatter — it is an environment for treating pro
 npm install
 npm run dev
 ```
+
+### ComfyUI Integration Setup
+
+To use the Generate feature (sending prompts directly to ComfyUI):
+
+1. Start ComfyUI with CORS enabled:
+   ```bash
+   python main.py --enable-cors-header
+   ```
+2. In ComfyUI, open **Settings → Enable Dev mode options**
+3. Save your workflow using **Save (API Format)**
+4. In Siglane, click **Generate** → load the API format JSON
+5. Edit prompts and generation params in Siglane, then hit **Generate** (or Ctrl+Enter)
 
 ---
 
