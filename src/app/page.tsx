@@ -1068,7 +1068,7 @@ export default function Home() {
                         onChange={(e) =>
                           handleUpdateOverrides({ samplerName: e.target.value })
                         }
-                        className="bg-transparent text-neutral-200 font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none cursor-pointer"
+                        className="bg-neutral-800 text-neutral-200 font-mono text-xs border border-neutral-700 rounded px-1.5 py-0.5 focus:border-neutral-400 focus:outline-none cursor-pointer"
                       >
                         {[
                           "euler", "euler_ancestral", "euler_cfg_pp", "heun", "heunpp2",
@@ -1078,7 +1078,7 @@ export default function Home() {
                           "dpmpp_3m_sde", "dpmpp_3m_sde_gpu",
                           "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2",
                         ].map((s) => (
-                          <option key={s} value={s}>
+                          <option key={s} value={s} className="bg-neutral-800 text-neutral-200">
                             {s}
                           </option>
                         ))}
@@ -1093,13 +1093,13 @@ export default function Home() {
                         onChange={(e) =>
                           handleUpdateOverrides({ scheduler: e.target.value })
                         }
-                        className="bg-transparent text-neutral-200 font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none cursor-pointer"
+                        className="bg-neutral-800 text-neutral-200 font-mono text-xs border border-neutral-700 rounded px-1.5 py-0.5 focus:border-neutral-400 focus:outline-none cursor-pointer"
                       >
                         {[
                           "normal", "karras", "exponential", "sgm_uniform",
                           "simple", "ddim_uniform", "beta",
                         ].map((s) => (
-                          <option key={s} value={s}>
+                          <option key={s} value={s} className="bg-neutral-800 text-neutral-200">
                             {s}
                           </option>
                         ))}
@@ -1127,6 +1127,15 @@ export default function Home() {
                         </div>
                       </>
                     )}
+                    {/* API workflow再読み込み */}
+                    <span className="text-neutral-700">|</span>
+                    <button
+                      onClick={() => setShowApiWorkflowModal(true)}
+                      className="text-neutral-500 hover:text-sky-400 transition-colors"
+                      title="Load a different API workflow"
+                    >
+                      ↻ workflow
+                    </button>
                   </div>
                 )}
                 <div className="space-y-4 mb-6">
