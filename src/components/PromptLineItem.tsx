@@ -244,7 +244,7 @@ export default function PromptLineItem({
                 value={annotationValue}
                 onChange={(e) => setAnnotationValue(e.target.value)}
                 autoFocus
-                placeholder="説明を入力..."
+                placeholder="Add description..."
                 className="w-full bg-neutral-900 border border-neutral-600 rounded px-1.5 py-0.5 text-[11px] text-neutral-300 focus:outline-none focus:border-sky-500 mt-0.5"
                 onClick={(e) => e.stopPropagation()}
                 onBlur={() => {
@@ -349,7 +349,7 @@ export default function PromptLineItem({
               setIsEditingAnnotation(true);
             }}
             className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors flex-shrink-0 px-1"
-            title="注釈を追加"
+            title="Add note"
           >
             📝
           </button>
