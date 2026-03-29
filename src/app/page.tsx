@@ -59,6 +59,7 @@ import {
 import {
   type DefaultGroups,
   loadDefaultGroups,
+  saveDefaultGroups,
   recordDefaultGroup,
   removeDefaultGroup,
 } from "@/utils/defaultGroups";
@@ -1762,14 +1763,16 @@ export default function Home() {
               </div>
               <p className="text-xs text-neutral-400 mb-3">
                 Copy the list below, paste into an AI to get descriptions, then paste the result back and click Register.
-                Format: <code className="text-neutral-300">tag = description</code>
+                Format: <code className="text-neutral-300">tag = description :Category</code>
+                <br />
+                <span className="text-neutral-500">Category is optional. You can also use <code className="text-neutral-400">tag :Category</code> without description.</span>
               </p>
               <textarea
                 value={bulkAnnotationText}
                 onChange={(e) => setBulkAnnotationText(e.target.value)}
                 rows={14}
                 className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-xs font-mono text-neutral-200 focus:outline-none focus:border-neutral-400 resize-y"
-                placeholder={"masterpiece = highest quality tag\n1girl = one female character\nblue hair = blue colored hair"}
+                placeholder={"masterpiece = highest quality tag :Quality\n1girl = one female character :Character\nblue hair = blue colored hair :Hair\ncinematic lighting :Style"}
               />
               <div className="flex items-center justify-between mt-3">
                 <button
@@ -1791,31 +1794,77 @@ export default function Home() {
                   <button
                     onClick={() => {
                       const lines = bulkAnnotationText.split("\n");
-                      const parsed: { key: string; desc: string }[] = [];
-                      for (const line of lines) {
-                        const match = line.match(/^(.+?)\s*[=→:]\s*(.+)$/);
-                        if (match) {
-                          const key = match[1].trim().toLowerCase();
-                          const desc = match[2].trim();
-                          if (key && desc) {
-                            parsed.push({ key, desc });
-                          }
+                      const parsed: {
+                        key: string;
+                        desc: string | null;
+                        category: string | null;
+                      }[] = [];
+                      for (const rawLine of lines) {
+                        const trimmed = rawLine.trim();
+                        if (!trimmed) continue;
+
+                        // :Category を末尾から抽出
+                        let category: string | null = null;
+                        let rest = trimmed;
+                        const catMatch = rest.match(/\s+:(\S+)$/);
+                        if (catMatch) {
+                          category = catMatch[1];
+                          rest = rest.slice(0, -catMatch[0].length).trim();
+                        }
+
+                        // tag = description を分割
+                        const eqMatch = rest.match(/^(.+?)\s*[=→]\s*(.+)$/);
+                        if (eqMatch) {
+                          const key = eqMatch[1].trim().toLowerCase();
+                          const desc = eqMatch[2].trim();
+                          if (key) parsed.push({ key, desc, category });
+                        } else if (category) {
+                          // カテゴリのみ（例: "masterpiece :Quality"）
+                          const key = rest.trim().toLowerCase();
+                          if (key) parsed.push({ key, desc: null, category });
                         }
                       }
+
+                      let annotationCount = 0;
+                      let groupCount = 0;
+
                       if (parsed.length > 0) {
+                        // 注釈を登録
                         setAnnotations((prev) => {
                           const updated = { ...prev };
                           for (const { key, desc } of parsed) {
-                            updated[key] = desc;
+                            if (desc) {
+                              updated[key] = desc;
+                              annotationCount++;
+                            }
                           }
-                          saveAnnotations(updated);
+                          if (annotationCount > 0) saveAnnotations(updated);
+                          return updated;
+                        });
+
+                        // デフォルトグループを登録
+                        setDefaultGroups((prev) => {
+                          let updated = prev;
+                          for (const { key, category: cat } of parsed) {
+                            if (cat) {
+                              updated = { ...updated, [key]: cat };
+                              groupCount++;
+                            }
+                          }
+                          if (groupCount > 0) saveDefaultGroups(updated);
                           return updated;
                         });
                       }
+
                       setShowBulkAnnotation(false);
-                      if (parsed.length > 0) {
+                      if (annotationCount > 0 || groupCount > 0) {
+                        const parts: string[] = [];
+                        if (annotationCount > 0)
+                          parts.push(`${annotationCount} annotations`);
+                        if (groupCount > 0)
+                          parts.push(`${groupCount} default groups`);
                         setGenerateToast({
-                          message: `Registered ${parsed.length} annotations`,
+                          message: `Registered ${parts.join(" + ")}`,
                           type: "success",
                         });
                       }
