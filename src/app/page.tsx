@@ -30,6 +30,21 @@ import {
   isParseError,
   formatGenerationParams,
 } from "@/utils/comfyWorkflow";
+import {
+  type ComfySettings,
+  type ComfyApiWorkflow,
+  isApiFormat,
+  parseComfyApiWorkflow,
+  isApiParseError,
+  formatApiGenerationParams,
+  writePromptsToApiWorkflow,
+  queuePrompt,
+  loadComfySettings,
+  saveComfySettings,
+  getActiveConnection,
+  createDefaultSettings,
+  testConnection,
+} from "@/utils/comfyApi";
 
 const STORAGE_KEY = "siglane-app-state";
 const LEGACY_STORAGE_KEY = "siglane-state";
@@ -518,6 +533,8 @@ export default function Home() {
       if (e.key === "Escape") {
         setShowHelp(false);
         setIsRenamingHeader(false);
+        setShowApiWorkflowModal(false);
+        setShowComfySettingsModal(false);
       }
     };
     window.addEventListener("keydown", handleGlobalKey);
@@ -525,6 +542,133 @@ export default function Home() {
   }, []);
 
   const isTemplateActive = activeSession?.isTemplate ?? false;
+
+  // --- ComfyUI API連携 ---
+  const [comfySettings, setComfySettings] = useState<ComfySettings>(createDefaultSettings);
+  const [showApiWorkflowModal, setShowApiWorkflowModal] = useState(false);
+  const [showComfySettingsModal, setShowComfySettingsModal] = useState(false);
+  const [generateToast, setGenerateToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const apiWorkflowFileRef = useRef<HTMLInputElement>(null);
+
+  // ComfyUI設定をlocalStorageから読み込み
+  useEffect(() => {
+    setComfySettings(loadComfySettings());
+  }, []);
+
+  // トースト自動消去
+  useEffect(() => {
+    if (!generateToast) return;
+    const timer = setTimeout(() => setGenerateToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [generateToast]);
+
+  const handleImportApiWorkflow = useCallback(
+    (file: File) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const json = JSON.parse(e.target?.result as string);
+
+          if (!isApiFormat(json)) {
+            setGenerateToast({
+              message:
+                "This is not an API format workflow. In ComfyUI, enable Dev mode and use 'Save (API Format)'.",
+              type: "error",
+            });
+            return;
+          }
+
+          const result = parseComfyApiWorkflow(json);
+          if (isApiParseError(result)) {
+            setGenerateToast({
+              message: `API workflow import failed: ${result.error}`,
+              type: "error",
+            });
+            return;
+          }
+
+          updateActiveSession((s) => ({
+            ...s,
+            comfyApiWorkflow: json as Record<string, unknown>,
+            comfyApiPositiveNodeId: result.positiveNodeId,
+            comfyApiNegativeNodeId: result.negativeNodeId,
+          }));
+
+          setShowApiWorkflowModal(false);
+          setGenerateToast({
+            message: "API workflow loaded. Ready to generate!",
+            type: "success",
+          });
+        } catch {
+          setGenerateToast({
+            message: "Failed to parse JSON file",
+            type: "error",
+          });
+        }
+      };
+      reader.readAsText(file);
+    },
+    [updateActiveSession],
+  );
+
+  const handleGenerate = useCallback(async () => {
+    if (!activeSession) return;
+
+    // API workflowが未設定 → インポートモーダルを出す
+    if (
+      !activeSession.comfyApiWorkflow ||
+      !activeSession.comfyApiPositiveNodeId ||
+      !activeSession.comfyApiNegativeNodeId
+    ) {
+      setShowApiWorkflowModal(true);
+      return;
+    }
+
+    const conn = getActiveConnection(comfySettings);
+    if (!conn) {
+      setShowComfySettingsModal(true);
+      return;
+    }
+
+    setIsGenerating(true);
+
+    const positiveText = joinPromptLines(activeSession.positiveLines);
+    const negativeText = joinPromptLines(activeSession.negativeLines);
+
+    const updatedWorkflow = writePromptsToApiWorkflow(
+      activeSession.comfyApiWorkflow,
+      activeSession.comfyApiPositiveNodeId,
+      activeSession.comfyApiNegativeNodeId,
+      positiveText,
+      negativeText,
+    );
+
+    const result = await queuePrompt(conn, updatedWorkflow as ComfyApiWorkflow);
+
+    setIsGenerating(false);
+
+    if (result.success) {
+      setGenerateToast({ message: "Queued!", type: "success" });
+    } else {
+      setGenerateToast({
+        message: result.error ?? "Failed to queue prompt",
+        type: "error",
+      });
+    }
+  }, [activeSession, comfySettings]);
+
+  const handleSaveComfySettings = useCallback(
+    (newSettings: ComfySettings) => {
+      setComfySettings(newSettings);
+      saveComfySettings(newSettings);
+      setShowComfySettingsModal(false);
+    },
+    [],
+  );
 
   const positiveAllText = activeSession
     ? joinAllPromptLines(activeSession.positiveLines)
@@ -660,8 +804,50 @@ export default function Home() {
               )}
             </div>
 
-            {/* 右: 重みモード + ショートカット + 保存状態 */}
+            {/* 右: 生成 + 接続設定 + 重みモード + ショートカット + 保存状態 */}
             <div className="flex items-center gap-4 flex-shrink-0 pt-1">
+              {/* ComfyUI Generate */}
+              {!isTemplateActive && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleGenerate}
+                    disabled={isGenerating}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                      isGenerating
+                        ? "bg-neutral-700 text-neutral-500 cursor-wait"
+                        : activeSession?.comfyApiWorkflow
+                          ? "bg-sky-600 hover:bg-sky-500 text-white"
+                          : "bg-neutral-700 hover:bg-neutral-600 text-neutral-300"
+                    }`}
+                    title={
+                      activeSession?.comfyApiWorkflow
+                        ? "Send to ComfyUI"
+                        : "Click to load an API workflow"
+                    }
+                  >
+                    {isGenerating ? "Sending..." : "Generate"}
+                  </button>
+                  <button
+                    onClick={() => setShowComfySettingsModal(true)}
+                    className="text-neutral-600 hover:text-neutral-400 transition-colors p-1"
+                    title="ComfyUI connection settings"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               <div className="flex items-center gap-1.5 text-xs">
                 <span className="text-neutral-600">Weight</span>
                 <button
@@ -830,6 +1016,210 @@ export default function Home() {
                 <p>Toggle to include / exclude from output</p>
                 <p>Changes are saved automatically</p>
               </div>
+            </div>
+          </div>,
+          document.body
+        )}
+      {/* API Workflow読み込みモーダル */}
+      {showApiWorkflowModal &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 9999,
+            }}
+            onClick={() => setShowApiWorkflowModal(false)}
+          >
+            <div
+              style={{
+                backgroundColor: "#262626",
+                border: "1px solid #404040",
+                borderRadius: "8px",
+                padding: "24px",
+                maxWidth: "420px",
+                width: "100%",
+                margin: "0 16px",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-medium text-neutral-200">
+                  Load API Workflow
+                </h2>
+                <button
+                  onClick={() => setShowApiWorkflowModal(false)}
+                  className="text-neutral-500 hover:text-neutral-300 transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-xs text-neutral-400 mb-4">
+                To generate images from Siglane, import a ComfyUI workflow saved in API format.
+              </p>
+              <div className="bg-neutral-800 border border-neutral-700 border-dashed rounded-lg p-6 text-center mb-4">
+                <input
+                  ref={apiWorkflowFileRef}
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImportApiWorkflow(file);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  onClick={() => apiWorkflowFileRef.current?.click()}
+                  className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-sm rounded transition-colors"
+                >
+                  Select API workflow JSON
+                </button>
+                <p className="text-[11px] text-neutral-500 mt-2">
+                  .json file saved with &quot;Save (API Format)&quot;
+                </p>
+              </div>
+              <div className="bg-neutral-800/50 rounded p-3 space-y-1.5">
+                <p className="text-[11px] text-neutral-500 font-medium">
+                  How to get API format:
+                </p>
+                <p className="text-[11px] text-neutral-500">
+                  1. In ComfyUI, open Settings → Enable Dev mode options
+                </p>
+                <p className="text-[11px] text-neutral-500">
+                  2. Click &quot;Save (API Format)&quot; in the menu
+                </p>
+                <p className="text-[11px] text-neutral-500">
+                  3. Import the saved .json file here
+                </p>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* ComfyUI接続設定モーダル */}
+      {showComfySettingsModal &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 9999,
+            }}
+            onClick={() => setShowComfySettingsModal(false)}
+          >
+            <div
+              style={{
+                backgroundColor: "#262626",
+                border: "1px solid #404040",
+                borderRadius: "8px",
+                padding: "24px",
+                maxWidth: "420px",
+                width: "100%",
+                margin: "0 16px",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-medium text-neutral-200">
+                  ComfyUI Connection
+                </h2>
+                <button
+                  onClick={() => setShowComfySettingsModal(false)}
+                  className="text-neutral-500 hover:text-neutral-300 transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+              {(() => {
+                const conn = getActiveConnection(comfySettings);
+                return (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-neutral-400 mb-1">
+                        Server URL
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue={conn?.url ?? "http://127.0.0.1:8188"}
+                        onBlur={(e) => {
+                          const newUrl = e.target.value.trim();
+                          if (!newUrl || !conn) return;
+                          handleSaveComfySettings({
+                            ...comfySettings,
+                            connections: comfySettings.connections.map((c) =>
+                              c.id === conn.id ? { ...c, url: newUrl } : c,
+                            ),
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
+                        className="w-full bg-neutral-800 border border-neutral-600 rounded px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-neutral-400 font-mono"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={async () => {
+                          if (!conn) return;
+                          const result = await testConnection(conn);
+                          setGenerateToast(
+                            result.ok
+                              ? { message: "Connected to ComfyUI!", type: "success" }
+                              : { message: `Connection failed: ${result.error}`, type: "error" },
+                          );
+                        }}
+                        className="text-xs text-sky-500 hover:text-sky-400 transition-colors"
+                      >
+                        Test connection
+                      </button>
+                      <p className="text-[11px] text-neutral-600">
+                        ComfyUI must be started with --enable-cors-header
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* トースト通知 */}
+      {generateToast &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              bottom: "24px",
+              right: "24px",
+              zIndex: 10000,
+            }}
+          >
+            <div
+              className={`px-4 py-2.5 rounded-lg text-sm shadow-lg border ${
+                generateToast.type === "success"
+                  ? "bg-green-900/80 border-green-700 text-green-200"
+                  : "bg-red-900/80 border-red-700 text-red-200"
+              }`}
+              style={{ maxWidth: "360px" }}
+            >
+              {generateToast.message}
             </div>
           </div>,
           document.body
