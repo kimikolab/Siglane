@@ -51,7 +51,9 @@ import {
 } from "@/utils/comfyApi";
 import {
   loadAnnotations,
+  saveAnnotations,
   setAnnotation as updateAnnotation,
+  normalizeForLookup,
 } from "@/utils/annotations";
 
 const STORAGE_KEY = "siglane-app-state";
@@ -125,6 +127,8 @@ export default function Home() {
 
   // --- プロンプト注釈 ---
   const [annotations, setAnnotations] = useState<Record<string, string>>({});
+  const [showBulkAnnotation, setShowBulkAnnotation] = useState(false);
+  const [bulkAnnotationText, setBulkAnnotationText] = useState("");
   useEffect(() => {
     setAnnotations(loadAnnotations());
   }, []);
@@ -1317,6 +1321,26 @@ export default function Home() {
                       </svg>
                       Outline
                     </button>
+                    <div className="flex-1" />
+                    <button
+                      onClick={() => {
+                        if (!activeSession) return;
+                        const allTexts = [
+                          ...activeSession.positiveLines,
+                          ...activeSession.negativeLines,
+                        ].map((l) => l.text);
+                        const unique = [...new Set(allTexts.map((t) => normalizeForLookup(t)))];
+                        const unannotated = unique.filter((key) => !annotations[key]);
+                        setBulkAnnotationText(
+                          unannotated.map((key) => `${key} = `).join("\n"),
+                        );
+                        setShowBulkAnnotation(true);
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                      title="Bulk add notes for unannotated prompts"
+                    >
+                      📝 Bulk notes
+                    </button>
                   </div>
 
                   <PromptEditor
@@ -1623,6 +1647,118 @@ export default function Home() {
                   </div>
                 );
               })()}
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* 一括注釈モーダル */}
+      {showBulkAnnotation &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 9999,
+            }}
+            onClick={() => setShowBulkAnnotation(false)}
+          >
+            <div
+              style={{
+                backgroundColor: "#262626",
+                border: "1px solid #404040",
+                borderRadius: "8px",
+                padding: "24px",
+                maxWidth: "520px",
+                width: "100%",
+                margin: "0 16px",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-medium text-neutral-200">
+                  Bulk Notes
+                </h2>
+                <button
+                  onClick={() => setShowBulkAnnotation(false)}
+                  className="text-neutral-500 hover:text-neutral-300 transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-xs text-neutral-400 mb-3">
+                Copy the list below, paste into an AI to get descriptions, then paste the result back and click Register.
+                Format: <code className="text-neutral-300">tag = description</code>
+              </p>
+              <textarea
+                value={bulkAnnotationText}
+                onChange={(e) => setBulkAnnotationText(e.target.value)}
+                rows={14}
+                className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-xs font-mono text-neutral-200 focus:outline-none focus:border-neutral-400 resize-y"
+                placeholder={"masterpiece = highest quality tag\n1girl = one female character\nblue hair = blue colored hair"}
+              />
+              <div className="flex items-center justify-between mt-3">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(bulkAnnotationText);
+                    setGenerateToast({ message: "Copied to clipboard", type: "success" });
+                  }}
+                  className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                >
+                  Copy to clipboard
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowBulkAnnotation(false)}
+                    className="px-3 py-1.5 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      const lines = bulkAnnotationText.split("\n");
+                      const parsed: { key: string; desc: string }[] = [];
+                      for (const line of lines) {
+                        const match = line.match(/^(.+?)\s*[=→:]\s*(.+)$/);
+                        if (match) {
+                          const key = match[1].trim().toLowerCase();
+                          const desc = match[2].trim();
+                          if (key && desc) {
+                            parsed.push({ key, desc });
+                          }
+                        }
+                      }
+                      if (parsed.length > 0) {
+                        setAnnotations((prev) => {
+                          const updated = { ...prev };
+                          for (const { key, desc } of parsed) {
+                            updated[key] = desc;
+                          }
+                          saveAnnotations(updated);
+                          return updated;
+                        });
+                      }
+                      setShowBulkAnnotation(false);
+                      if (parsed.length > 0) {
+                        setGenerateToast({
+                          message: `Registered ${parsed.length} annotations`,
+                          type: "success",
+                        });
+                      }
+                    }}
+                    className="px-3 py-1.5 text-xs bg-sky-600 hover:bg-sky-500 text-white rounded transition-colors"
+                  >
+                    Register
+                  </button>
+                </div>
+              </div>
             </div>
           </div>,
           document.body
