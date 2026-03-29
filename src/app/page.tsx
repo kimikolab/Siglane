@@ -8,6 +8,7 @@ import {
   Folder,
   SiglaneState,
   PromptLine,
+  ComfyGenerationOverrides,
   parsePrompt,
   joinPromptLines,
   joinAllPromptLines,
@@ -38,7 +39,8 @@ import {
   isApiParseError,
   formatApiGenerationParams,
   writePromptsToApiWorkflow,
-  randomizeSeed,
+  extractOverrides,
+  applyOverrides,
   queuePrompt,
   loadComfySettings,
   saveComfySettings,
@@ -603,6 +605,7 @@ export default function Home() {
             comfyApiWorkflow: json as Record<string, unknown>,
             comfyApiPositiveNodeId: result.positiveNodeId,
             comfyApiNegativeNodeId: result.negativeNodeId,
+            comfyOverrides: extractOverrides(json as ComfyApiWorkflow),
           }));
 
           setShowApiWorkflowModal(false);
@@ -654,8 +657,16 @@ export default function Home() {
       negativeText,
     );
 
-    // seedをランダム化（毎回異なる結果を得るため）
-    const finalWorkflow = randomizeSeed(updatedWorkflow);
+    // オーバーライド値をサンプラーノードに適用（seed, cfg, steps等）
+    const overrides = activeSession.comfyOverrides ?? {
+      seed: "random" as const,
+      cfg: 7,
+      steps: 20,
+      samplerName: "euler",
+      scheduler: "normal",
+      denoise: 1.0,
+    };
+    const finalWorkflow = applyOverrides(updatedWorkflow, overrides);
 
     const result = await queuePrompt(conn, finalWorkflow);
 
@@ -678,6 +689,18 @@ export default function Home() {
       setShowComfySettingsModal(false);
     },
     [],
+  );
+
+  const handleUpdateOverrides = useCallback(
+    (updates: Partial<ComfyGenerationOverrides>) => {
+      updateActiveSession((s) => ({
+        ...s,
+        comfyOverrides: s.comfyOverrides
+          ? { ...s.comfyOverrides, ...updates }
+          : undefined,
+      }));
+    },
+    [updateActiveSession],
   );
 
   // handleGenerateの最新参照をrefで保持（useEffect内から呼ぶため）
@@ -904,6 +927,208 @@ export default function Home() {
                   isTemplateActive ? "pointer-events-none opacity-60" : ""
                 }
               >
+                {/* 生成パラメータパネル */}
+                {activeSession.comfyOverrides && (
+                  <div className="mb-4 bg-neutral-800/50 rounded-lg px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                    {/* seed */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-neutral-500">seed</span>
+                      {activeSession.comfyOverrides.seed === "random" ? (
+                        <button
+                          onClick={() => {
+                            const current = activeSession.comfyOverrides;
+                            if (!current) return;
+                            handleUpdateOverrides({
+                              seed: Math.floor(Math.random() * 2 ** 32),
+                            });
+                          }}
+                          className="text-sky-500 hover:text-sky-400 transition-colors font-mono"
+                          title="Click to fix to a specific seed"
+                        >
+                          🎲 random
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span
+                            className="text-neutral-200 font-mono cursor-text"
+                            title="Click random to unfix"
+                          >
+                            {activeSession.comfyOverrides.seed}
+                          </span>
+                          <button
+                            onClick={() =>
+                              handleUpdateOverrides({ seed: "random" })
+                            }
+                            className="text-neutral-500 hover:text-sky-400 transition-colors"
+                            title="Switch to random seed"
+                          >
+                            🎲
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <span className="text-neutral-700">|</span>
+                    {/* cfg */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-neutral-500">cfg</span>
+                      <button
+                        onClick={() =>
+                          handleUpdateOverrides({
+                            cfg: Math.max(
+                              1,
+                              Math.round(
+                                (activeSession.comfyOverrides!.cfg - 0.5) * 10,
+                              ) / 10,
+                            ),
+                          })
+                        }
+                        className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        value={activeSession.comfyOverrides.cfg}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          if (!isNaN(v) && v >= 1 && v <= 30)
+                            handleUpdateOverrides({ cfg: v });
+                        }}
+                        className="w-12 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none"
+                        step={0.5}
+                        min={1}
+                        max={30}
+                      />
+                      <button
+                        onClick={() =>
+                          handleUpdateOverrides({
+                            cfg: Math.min(
+                              30,
+                              Math.round(
+                                (activeSession.comfyOverrides!.cfg + 0.5) * 10,
+                              ) / 10,
+                            ),
+                          })
+                        }
+                        className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <span className="text-neutral-700">|</span>
+                    {/* steps */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-neutral-500">steps</span>
+                      <button
+                        onClick={() =>
+                          handleUpdateOverrides({
+                            steps: Math.max(
+                              1,
+                              activeSession.comfyOverrides!.steps - 1,
+                            ),
+                          })
+                        }
+                        className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        value={activeSession.comfyOverrides.steps}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value);
+                          if (!isNaN(v) && v >= 1 && v <= 150)
+                            handleUpdateOverrides({ steps: v });
+                        }}
+                        className="w-10 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none"
+                        step={1}
+                        min={1}
+                        max={150}
+                      />
+                      <button
+                        onClick={() =>
+                          handleUpdateOverrides({
+                            steps: Math.min(
+                              150,
+                              activeSession.comfyOverrides!.steps + 1,
+                            ),
+                          })
+                        }
+                        className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <span className="text-neutral-700">|</span>
+                    {/* sampler */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-neutral-500">sampler</span>
+                      <select
+                        value={activeSession.comfyOverrides.samplerName}
+                        onChange={(e) =>
+                          handleUpdateOverrides({ samplerName: e.target.value })
+                        }
+                        className="bg-transparent text-neutral-200 font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none cursor-pointer"
+                      >
+                        {[
+                          "euler", "euler_ancestral", "euler_cfg_pp", "heun", "heunpp2",
+                          "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive",
+                          "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu",
+                          "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu",
+                          "dpmpp_3m_sde", "dpmpp_3m_sde_gpu",
+                          "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2",
+                        ].map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <span className="text-neutral-700">|</span>
+                    {/* scheduler */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-neutral-500">scheduler</span>
+                      <select
+                        value={activeSession.comfyOverrides.scheduler}
+                        onChange={(e) =>
+                          handleUpdateOverrides({ scheduler: e.target.value })
+                        }
+                        className="bg-transparent text-neutral-200 font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none cursor-pointer"
+                      >
+                        {[
+                          "normal", "karras", "exponential", "sgm_uniform",
+                          "simple", "ddim_uniform", "beta",
+                        ].map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* denoise (1.0以外の場合のみ表示) */}
+                    {activeSession.comfyOverrides.denoise !== 1.0 && (
+                      <>
+                        <span className="text-neutral-700">|</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-neutral-500">denoise</span>
+                          <input
+                            type="number"
+                            value={activeSession.comfyOverrides.denoise}
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value);
+                              if (!isNaN(v) && v >= 0 && v <= 1)
+                                handleUpdateOverrides({ denoise: v });
+                            }}
+                            className="w-12 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none"
+                            step={0.05}
+                            min={0}
+                            max={1}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-4 mb-6">
                   <InputArea
                     label="Positive"

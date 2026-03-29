@@ -24,6 +24,18 @@ export interface Session {
   comfyApiWorkflow?: Record<string, unknown>;
   comfyApiPositiveNodeId?: string;
   comfyApiNegativeNodeId?: string;
+  // 生成パラメータオーバーライド（UIから編集可能）
+  comfyOverrides?: ComfyGenerationOverrides;
+}
+
+// Siglane上で編集可能な生成パラメータ
+export interface ComfyGenerationOverrides {
+  seed: number | "random";
+  cfg: number;
+  steps: number;
+  samplerName: string;
+  scheduler: string;
+  denoise: number;
 }
 
 // フォルダ（2階層まで: root → subfolder）

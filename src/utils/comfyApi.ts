@@ -1,5 +1,7 @@
 // ComfyUI API形式ワークフロー解析・送信ユーティリティ
 
+import type { ComfyGenerationOverrides } from "@/types";
+
 // --- 型定義 ---
 
 // API形式のノード
@@ -295,6 +297,47 @@ export function randomizeSeed(workflow: ComfyApiWorkflow): ComfyApiWorkflow {
       };
     }
   }
+  return wf;
+}
+
+// --- オーバーライド ---
+
+// API形式ワークフローからオーバーライド初期値を抽出
+export function extractOverrides(
+  workflow: ComfyApiWorkflow,
+): ComfyGenerationOverrides {
+  const sampler = findSamplerNode(workflow);
+  const params = sampler ? extractApiSamplerParams(sampler.node) : {};
+  return {
+    seed: "random",
+    cfg: params.cfg ?? 7.0,
+    steps: params.steps ?? 20,
+    samplerName: params.samplerName ?? "euler",
+    scheduler: params.scheduler ?? "normal",
+    denoise: params.denoise ?? 1.0,
+  };
+}
+
+// オーバーライド値をワークフローのサンプラーノードに適用
+export function applyOverrides(
+  workflow: ComfyApiWorkflow,
+  overrides: ComfyGenerationOverrides,
+): ComfyApiWorkflow {
+  const wf = JSON.parse(JSON.stringify(workflow)) as ComfyApiWorkflow;
+  const sampler = findSamplerNode(wf);
+  if (!sampler) return wf;
+
+  const inputs = wf[sampler.nodeId].inputs;
+  inputs.seed =
+    overrides.seed === "random"
+      ? Math.floor(Math.random() * 2 ** 32)
+      : overrides.seed;
+  inputs.cfg = overrides.cfg;
+  inputs.steps = overrides.steps;
+  inputs.sampler_name = overrides.samplerName;
+  inputs.scheduler = overrides.scheduler;
+  inputs.denoise = overrides.denoise;
+
   return wf;
 }
 
