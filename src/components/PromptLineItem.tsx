@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { PromptLine, extractWeight, hasSpecialWeightSyntax, calcSpecialWeight } from "@/types";
+import { PromptLine, DEFAULT_GROUP_CATEGORIES, extractWeight, hasSpecialWeightSyntax, calcSpecialWeight } from "@/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -20,6 +20,7 @@ interface PromptLineItemProps {
   onWeightChange: (id: string, delta: number) => void;
   onWeightSet: (id: string, weight: number) => void;
   onSelect?: (id: string, shiftKey: boolean) => void;
+  onSetLineGroup?: (id: string, groupLabel: string | null) => void;
 }
 
 export default function PromptLineItem({
@@ -35,11 +36,13 @@ export default function PromptLineItem({
   onWeightChange,
   onWeightSet,
   onSelect,
+  onSetLineGroup,
 }: PromptLineItemProps) {
   const [isEditing, setIsEditing] = useState(line.text === "");
   const [isEditingWeight, setIsEditingWeight] = useState(false);
   const [weightInputValue, setWeightInputValue] = useState("");
   const weightInputRef = useRef<HTMLInputElement>(null);
+  const [showBadgeDropdown, setShowBadgeDropdown] = useState(false);
 
   const {
     attributes,
@@ -215,8 +218,66 @@ export default function PromptLineItem({
           </span>
         )}
 
-        {/* グループバッジ */}
-        {groupLabel && !isEditing && (
+        {/* グループバッジ（クリックで変更可能） */}
+        {!isEditing && !isSelectMode && onSetLineGroup && (
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowBadgeDropdown((prev) => !prev);
+              }}
+              className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                groupLabel
+                  ? "text-sky-400/70 bg-sky-900/30 border border-sky-800/30 hover:bg-sky-900/50"
+                  : "text-neutral-600 hover:text-neutral-400"
+              }`}
+              title={groupLabel ? "Change group" : "Set group"}
+            >
+              {groupLabel ?? "+"}
+            </button>
+            {showBadgeDropdown && (
+              <div
+                className="absolute top-full right-0 mt-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[140px]"
+                style={{ zIndex: 50 }}
+              >
+                {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSetLineGroup(line.id, cat);
+                      setShowBadgeDropdown(false);
+                    }}
+                    className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                      groupLabel === cat
+                        ? "text-sky-400 bg-sky-900/30"
+                        : "text-neutral-200 hover:bg-neutral-700"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                {groupLabel && (
+                  <>
+                    <div className="border-t border-neutral-700 my-1" />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSetLineGroup(line.id, null);
+                        setShowBadgeDropdown(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-700 transition-colors"
+                    >
+                      Remove group
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {/* 選択モード中はバッジ表示のみ */}
+        {!isEditing && isSelectMode && groupLabel && (
           <span className="text-[10px] text-sky-400/70 bg-sky-900/30 border border-sky-800/30 px-1.5 py-0.5 rounded flex-shrink-0">
             {groupLabel}
           </span>

@@ -39,6 +39,7 @@ interface PromptLineListProps {
   onSetGroup: (lineIds: string[], groupLabel: string) => void;
   onBulkToggle: (lineIds: string[], enabled: boolean) => void;
   onUngroup: (lineIds: string[]) => void;
+  onSetLineGroup: (id: string, groupLabel: string | null) => void;
 }
 
 export default function PromptLineList({
@@ -59,6 +60,7 @@ export default function PromptLineList({
   onSetGroup,
   onBulkToggle,
   onUngroup,
+  onSetLineGroup,
 }: PromptLineListProps) {
   // --- 選択モード（セクション内部管理） ---
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -337,6 +339,7 @@ export default function PromptLineList({
                   onWeightChange={onWeightChange}
                   onWeightSet={onWeightSet}
                   onSelect={handleSelect}
+                  onSetLineGroup={onSetLineGroup}
                 />
               ))}
 
@@ -397,7 +400,32 @@ export default function PromptLineList({
                     >
                       {isCollapsed ? "▶" : "▼"}
                     </button>
-                    <span className="text-xs font-medium text-sky-400/80">
+                    <span
+                      className={`text-xs font-medium text-sky-400/80 ${
+                        isSelectMode ? "cursor-pointer hover:text-sky-300" : ""
+                      }`}
+                      onClick={
+                        isSelectMode
+                          ? () => {
+                              setSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                const allSelected = groupLineIds.every((id) =>
+                                  next.has(id),
+                                );
+                                if (allSelected) {
+                                  groupLineIds.forEach((id) =>
+                                    next.delete(id),
+                                  );
+                                } else {
+                                  groupLineIds.forEach((id) => next.add(id));
+                                }
+                                return next;
+                              });
+                            }
+                          : undefined
+                      }
+                      title={isSelectMode ? "Select/deselect all in group" : undefined}
+                    >
                       {label}
                     </span>
                     <span className="text-[10px] text-neutral-500">
@@ -433,6 +461,7 @@ export default function PromptLineList({
                           onWeightChange={onWeightChange}
                           onWeightSet={onWeightSet}
                           onSelect={handleSelect}
+                          onSetLineGroup={onSetLineGroup}
                         />
                       ))}
                     </div>

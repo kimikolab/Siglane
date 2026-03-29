@@ -439,7 +439,10 @@ export default function Home() {
         const lines = [...(s[key] as PromptLine[])];
         const index = lines.findIndex((l) => l.id === id);
         if (index === -1) return s;
-        lines.splice(index, 1, ...parsed);
+        // 元の行のgroupIdを分割後の全行に継承
+        const originalGroupId = lines[index].groupId;
+        const newLines = parsed.map((l) => ({ ...l, groupId: originalGroupId }));
+        lines.splice(index, 1, ...newLines);
         return { ...s, [key]: lines };
       });
     }
@@ -605,6 +608,25 @@ export default function Home() {
       }));
     },
     [updateActiveSession],
+  );
+
+  // 行単位のグループ変更（Selectモード不要）
+  const handleSetLineGroup = useCallback(
+    (type: "positive" | "negative", id: string, groupLabel: string | null) => {
+      if (groupLabel === null) {
+        // グループ解除
+        const key = type === "positive" ? "positiveLines" : "negativeLines";
+        updateActiveSession((s) => ({
+          ...s,
+          [key]: (s[key] as PromptLine[]).map((l) =>
+            l.id === id ? { ...l, groupId: undefined } : l,
+          ),
+        }));
+      } else {
+        handleSetGroup(type, [id], groupLabel);
+      }
+    },
+    [handleSetGroup, updateActiveSession],
   );
 
   const isTemplateActive = activeSession?.isTemplate ?? false;
@@ -1264,6 +1286,7 @@ export default function Home() {
                     onSetGroup={handleSetGroup}
                     onBulkToggle={handleSectionBulkToggle}
                     onUngroup={handleUngroup}
+                    onSetLineGroup={handleSetLineGroup}
                   />
                 </div>
 
