@@ -8,6 +8,7 @@ import {
   Folder,
   SiglaneState,
   PromptLine,
+  PromptGroup,
   ComfyGenerationOverrides,
   parsePrompt,
   joinPromptLines,
@@ -55,6 +56,12 @@ import {
   setAnnotation as updateAnnotation,
   normalizeForLookup,
 } from "@/utils/annotations";
+import {
+  type DefaultGroups,
+  loadDefaultGroups,
+  recordDefaultGroup,
+  removeDefaultGroup,
+} from "@/utils/defaultGroups";
 
 const STORAGE_KEY = "siglane-app-state";
 const LEGACY_STORAGE_KEY = "siglane-state";
@@ -129,8 +136,10 @@ export default function Home() {
   const [annotations, setAnnotations] = useState<Record<string, string>>({});
   const [showBulkAnnotation, setShowBulkAnnotation] = useState(false);
   const [bulkAnnotationText, setBulkAnnotationText] = useState("");
+  const [defaultGroups, setDefaultGroups] = useState<DefaultGroups>({});
   useEffect(() => {
     setAnnotations(loadAnnotations());
+    setDefaultGroups(loadDefaultGroups());
   }, []);
   const isInitial = useRef(true);
 
@@ -346,15 +355,23 @@ export default function Home() {
           return;
         }
 
-        updateActiveSession((s) => ({
-          ...s,
-          positiveLines: parsePrompt(result.positivePrompt),
-          negativeLines: parsePrompt(result.negativePrompt),
-          memo: formatGenerationParams(result.generationParams),
-          comfyWorkflow: json,
-          comfyPositiveNodeId: result.positiveNodeId,
-          comfyNegativeNodeId: result.negativeNodeId,
-        }));
+        updateActiveSession((s) => {
+          const posParsed = parsePrompt(result.positivePrompt);
+          const negParsed = parsePrompt(result.negativePrompt);
+          const pos = applyDefaultGroupsToLines(posParsed, s.positiveGroups);
+          const neg = applyDefaultGroupsToLines(negParsed, s.negativeGroups);
+          return {
+            ...s,
+            positiveLines: pos.lines,
+            positiveGroups: pos.groups,
+            negativeLines: neg.lines,
+            negativeGroups: neg.groups,
+            memo: formatGenerationParams(result.generationParams),
+            comfyWorkflow: json,
+            comfyPositiveNodeId: result.positiveNodeId,
+            comfyNegativeNodeId: result.negativeNodeId,
+          };
+        });
       } catch {
         alert("Failed to parse JSON file");
       }
@@ -409,11 +426,19 @@ export default function Home() {
 
   // --- エディタ操作 ---
   const handleSyncPositive = (text: string) => {
-    updateActiveSession((s) => ({ ...s, positiveLines: parsePrompt(text) }));
+    updateActiveSession((s) => {
+      const parsed = parsePrompt(text);
+      const { lines, groups } = applyDefaultGroupsToLines(parsed, s.positiveGroups);
+      return { ...s, positiveLines: lines, positiveGroups: groups };
+    });
   };
 
   const handleSyncNegative = (text: string) => {
-    updateActiveSession((s) => ({ ...s, negativeLines: parsePrompt(text) }));
+    updateActiveSession((s) => {
+      const parsed = parsePrompt(text);
+      const { lines, groups } = applyDefaultGroupsToLines(parsed, s.negativeGroups);
+      return { ...s, negativeLines: lines, negativeGroups: groups };
+    });
   };
 
   const handleToggle = (type: "positive" | "negative", id: string) => {
@@ -570,6 +595,31 @@ export default function Home() {
   }, []);
 
   // --- セクション単位のグループ操作 ---
+
+  // デフォルトグループを未割り当ての行に自動適用
+  const applyDefaultGroupsToLines = useCallback(
+    (
+      lines: PromptLine[],
+      existingGroups: PromptGroup[] | undefined,
+    ): { lines: PromptLine[]; groups: PromptGroup[] } => {
+      const groups = [...(existingGroups ?? [])];
+      const updatedLines = lines.map((l) => {
+        if (l.groupId) return l; // 既に割り当て済み
+        const label = defaultGroups[normalizeForLookup(l.text)];
+        if (!label) return l;
+        // グループを探すか作成
+        let group = groups.find((g) => g.label === label);
+        if (!group) {
+          group = { id: crypto.randomUUID(), label, order: groups.length };
+          groups.push(group);
+        }
+        return { ...l, groupId: group.id };
+      });
+      return { lines: updatedLines, groups };
+    },
+    [defaultGroups],
+  );
+
   const handleSetGroup = useCallback(
     (type: "positive" | "negative", lineIds: string[], groupLabel: string) => {
       updateActiveSession((s) => {
@@ -585,9 +635,21 @@ export default function Home() {
         const gid = group.id;
         const idSet = new Set(lineIds);
 
+        // デフォルトグループを記録
+        const lines = s[linesKey] as PromptLine[];
+        setDefaultGroups((prev) => {
+          let updated = prev;
+          for (const l of lines) {
+            if (idSet.has(l.id)) {
+              updated = recordDefaultGroup(updated, l.text, groupLabel);
+            }
+          }
+          return updated;
+        });
+
         return {
           ...s,
-          [linesKey]: (s[linesKey] as PromptLine[]).map((l) =>
+          [linesKey]: lines.map((l) =>
             idSet.has(l.id) ? { ...l, groupId: gid } : l,
           ),
           [groupsKey]: groups,
@@ -629,14 +691,19 @@ export default function Home() {
   const handleSetLineGroup = useCallback(
     (type: "positive" | "negative", id: string, groupLabel: string | null) => {
       if (groupLabel === null) {
-        // グループ解除
         const key = type === "positive" ? "positiveLines" : "negativeLines";
-        updateActiveSession((s) => ({
-          ...s,
-          [key]: (s[key] as PromptLine[]).map((l) =>
-            l.id === id ? { ...l, groupId: undefined } : l,
-          ),
-        }));
+        updateActiveSession((s) => {
+          const line = (s[key] as PromptLine[]).find((l) => l.id === id);
+          if (line) {
+            setDefaultGroups((prev) => removeDefaultGroup(prev, line.text));
+          }
+          return {
+            ...s,
+            [key]: (s[key] as PromptLine[]).map((l) =>
+              l.id === id ? { ...l, groupId: undefined } : l,
+            ),
+          };
+        });
       } else {
         handleSetGroup(type, [id], groupLabel);
       }
