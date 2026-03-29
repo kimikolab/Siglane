@@ -4,7 +4,30 @@ export interface PromptLine {
   id: string;
   text: string;
   enabled: boolean;
+  groupId?: string;
 }
+
+// プロンプト行のグループ定義（セッション単位）
+export interface PromptGroup {
+  id: string;
+  label: string;
+  color?: string;
+  order: number;
+}
+
+// デフォルトカテゴリ候補
+export const DEFAULT_GROUP_CATEGORIES = [
+  "Quality",
+  "Character",
+  "Hair",
+  "Eyes",
+  "Expression",
+  "Clothing",
+  "Accessories",
+  "Background",
+  "Pose",
+  "Style",
+] as const;
 
 // 1セッション（旧SiglaneState + メタ情報）
 export interface Session {
@@ -16,6 +39,9 @@ export interface Session {
   memo: string;
   updatedAt: string;
   folderId: string | null;
+  // グループ定義
+  positiveGroups?: PromptGroup[];
+  negativeGroups?: PromptGroup[];
   // ComfyUI連携 - UI形式（オプショナル）
   comfyWorkflow?: unknown;
   comfyPositiveNodeId?: number;

@@ -8,7 +8,9 @@ import {
   Folder,
   SiglaneState,
   PromptLine,
+  PromptGroup,
   ComfyGenerationOverrides,
+  DEFAULT_GROUP_CATEGORIES,
   parsePrompt,
   joinPromptLines,
   joinAllPromptLines,
@@ -521,6 +523,143 @@ export default function Home() {
   // --- ヘルプオーバーレイ ---
   const [showHelp, setShowHelp] = useState(false);
 
+  // --- 複数選択モード ---
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedLineIds, setSelectedLineIds] = useState<Set<string>>(new Set());
+  const lastSelectedId = useRef<string | null>(null);
+  const [showGroupDropdown, setShowGroupDropdown] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+
+  const exitSelectMode = useCallback(() => {
+    setIsSelectMode(false);
+    setSelectedLineIds(new Set());
+    lastSelectedId.current = null;
+    setShowGroupDropdown(false);
+  }, []);
+
+  const handleSelectLine = useCallback(
+    (id: string, shiftKey: boolean) => {
+      if (!activeSession) return;
+
+      setSelectedLineIds((prev) => {
+        const next = new Set(prev);
+
+        if (shiftKey && lastSelectedId.current) {
+          // Shift+click: 範囲選択
+          const allLines = [
+            ...activeSession.positiveLines,
+            ...activeSession.negativeLines,
+          ];
+          const lastIdx = allLines.findIndex(
+            (l) => l.id === lastSelectedId.current,
+          );
+          const curIdx = allLines.findIndex((l) => l.id === id);
+          if (lastIdx !== -1 && curIdx !== -1) {
+            const [from, to] =
+              lastIdx < curIdx ? [lastIdx, curIdx] : [curIdx, lastIdx];
+            for (let i = from; i <= to; i++) {
+              next.add(allLines[i].id);
+            }
+          }
+        } else {
+          // 通常クリック: トグル
+          if (next.has(id)) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
+        }
+
+        lastSelectedId.current = id;
+        return next;
+      });
+    },
+    [activeSession],
+  );
+
+  const handleSetGroupForSelected = useCallback(
+    (groupLabel: string) => {
+      if (!activeSession || selectedLineIds.size === 0) return;
+
+      updateActiveSession((s) => {
+        // positive側のグループを取得/作成
+        const posGroups = [...(s.positiveGroups ?? [])];
+        const negGroups = [...(s.negativeGroups ?? [])];
+
+        const ensureGroup = (
+          groups: PromptGroup[],
+          label: string,
+        ): string => {
+          const existing = groups.find((g) => g.label === label);
+          if (existing) return existing.id;
+          const newGroup: PromptGroup = {
+            id: crypto.randomUUID(),
+            label,
+            order: groups.length,
+          };
+          groups.push(newGroup);
+          return newGroup.id;
+        };
+
+        const posSelectedIds = new Set(
+          s.positiveLines
+            .filter((l) => selectedLineIds.has(l.id))
+            .map((l) => l.id),
+        );
+        const negSelectedIds = new Set(
+          s.negativeLines
+            .filter((l) => selectedLineIds.has(l.id))
+            .map((l) => l.id),
+        );
+
+        let newPosLines = s.positiveLines;
+        let newNegLines = s.negativeLines;
+
+        if (posSelectedIds.size > 0) {
+          const gid = ensureGroup(posGroups, groupLabel);
+          newPosLines = s.positiveLines.map((l) =>
+            posSelectedIds.has(l.id) ? { ...l, groupId: gid } : l,
+          );
+        }
+        if (negSelectedIds.size > 0) {
+          const gid = ensureGroup(negGroups, groupLabel);
+          newNegLines = s.negativeLines.map((l) =>
+            negSelectedIds.has(l.id) ? { ...l, groupId: gid } : l,
+          );
+        }
+
+        return {
+          ...s,
+          positiveLines: newPosLines,
+          negativeLines: newNegLines,
+          positiveGroups: posGroups,
+          negativeGroups: negGroups,
+        };
+      });
+
+      setShowGroupDropdown(false);
+      exitSelectMode();
+    },
+    [activeSession, selectedLineIds, updateActiveSession, exitSelectMode],
+  );
+
+  const handleBulkToggle = useCallback(
+    (enabled: boolean) => {
+      if (selectedLineIds.size === 0) return;
+      updateActiveSession((s) => ({
+        ...s,
+        positiveLines: s.positiveLines.map((l) =>
+          selectedLineIds.has(l.id) ? { ...l, enabled } : l,
+        ),
+        negativeLines: s.negativeLines.map((l) =>
+          selectedLineIds.has(l.id) ? { ...l, enabled } : l,
+        ),
+      }));
+      exitSelectMode();
+    },
+    [selectedLineIds, updateActiveSession, exitSelectMode],
+  );
+
   useEffect(() => {
     const handleGlobalKey = (e: KeyboardEvent) => {
       // Ctrl+Enter: Generate
@@ -544,11 +683,12 @@ export default function Home() {
         setIsRenamingHeader(false);
         setShowApiWorkflowModal(false);
         setShowComfySettingsModal(false);
+        if (isSelectMode) exitSelectMode();
       }
     };
     window.addEventListener("keydown", handleGlobalKey);
     return () => window.removeEventListener("keydown", handleGlobalKey);
-  }, []);
+  }, [isSelectMode, exitSelectMode]);
 
   const isTemplateActive = activeSession?.isTemplate ?? false;
 
@@ -1157,10 +1297,147 @@ export default function Home() {
                 </div>
 
                 <div className="mb-6">
+                  {/* 選択モードバー */}
+                  {!isTemplateActive && (
+                    <div className="flex items-center gap-2 mb-3">
+                      {isSelectMode ? (
+                        <div className="flex items-center gap-2 flex-wrap w-full bg-neutral-800/80 rounded-lg px-3 py-2">
+                          <span className="text-xs text-neutral-300">
+                            {selectedLineIds.size} selected
+                          </span>
+                          <div className="flex-1" />
+                          {/* Set Group */}
+                          <div className="relative">
+                            <button
+                              onClick={() =>
+                                setShowGroupDropdown((prev) => !prev)
+                              }
+                              disabled={selectedLineIds.size === 0}
+                              className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors disabled:opacity-40"
+                            >
+                              Set Group ▼
+                            </button>
+                            {showGroupDropdown && (
+                              <div
+                                className="absolute top-full left-0 mt-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[160px]"
+                                style={{ zIndex: 50 }}
+                              >
+                                {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+                                  <button
+                                    key={cat}
+                                    onClick={() =>
+                                      handleSetGroupForSelected(cat)
+                                    }
+                                    className="w-full text-left px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700 transition-colors"
+                                  >
+                                    {cat}
+                                  </button>
+                                ))}
+                                <div className="border-t border-neutral-700 mt-1 pt-1 px-3 py-1">
+                                  <div className="flex gap-1">
+                                    <input
+                                      type="text"
+                                      value={newGroupName}
+                                      onChange={(e) =>
+                                        setNewGroupName(e.target.value)
+                                      }
+                                      placeholder="Custom..."
+                                      className="flex-1 bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-neutral-400 min-w-0"
+                                      onKeyDown={(e) => {
+                                        if (
+                                          e.key === "Enter" &&
+                                          newGroupName.trim()
+                                        ) {
+                                          handleSetGroupForSelected(
+                                            newGroupName.trim(),
+                                          );
+                                          setNewGroupName("");
+                                        }
+                                      }}
+                                    />
+                                    <button
+                                      onClick={() => {
+                                        if (newGroupName.trim()) {
+                                          handleSetGroupForSelected(
+                                            newGroupName.trim(),
+                                          );
+                                          setNewGroupName("");
+                                        }
+                                      }}
+                                      className="px-2 py-1 text-xs bg-sky-600 hover:bg-sky-500 text-white rounded transition-colors"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {/* Bulk ON/OFF */}
+                          <button
+                            onClick={() => handleBulkToggle(true)}
+                            disabled={selectedLineIds.size === 0}
+                            className="px-2 py-1 text-xs bg-green-800/50 hover:bg-green-800/70 text-green-300 rounded transition-colors disabled:opacity-40"
+                          >
+                            ON
+                          </button>
+                          <button
+                            onClick={() => handleBulkToggle(false)}
+                            disabled={selectedLineIds.size === 0}
+                            className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded transition-colors disabled:opacity-40"
+                          >
+                            OFF
+                          </button>
+                          {/* Clear group */}
+                          <button
+                            onClick={() => {
+                              if (selectedLineIds.size === 0) return;
+                              updateActiveSession((s) => ({
+                                ...s,
+                                positiveLines: s.positiveLines.map((l) =>
+                                  selectedLineIds.has(l.id)
+                                    ? { ...l, groupId: undefined }
+                                    : l,
+                                ),
+                                negativeLines: s.negativeLines.map((l) =>
+                                  selectedLineIds.has(l.id)
+                                    ? { ...l, groupId: undefined }
+                                    : l,
+                                ),
+                              }));
+                              exitSelectMode();
+                            }}
+                            disabled={selectedLineIds.size === 0}
+                            className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-400 rounded transition-colors disabled:opacity-40"
+                          >
+                            Ungroup
+                          </button>
+                          <button
+                            onClick={exitSelectMode}
+                            className="px-2 py-1 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setIsSelectMode(true)}
+                          className="text-xs text-neutral-600 hover:text-neutral-400 transition-colors"
+                        >
+                          Select
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   <PromptEditor
                     positiveLines={activeSession.positiveLines}
                     negativeLines={activeSession.negativeLines}
+                    positiveGroups={activeSession.positiveGroups}
+                    negativeGroups={activeSession.negativeGroups}
                     weightMode={weightMode}
+                    isSelectMode={isSelectMode}
+                    selectedIds={selectedLineIds}
                     onToggle={handleToggle}
                     onDelete={handleDelete}
                     onUpdate={handleUpdate}
@@ -1169,6 +1446,7 @@ export default function Home() {
                     onReorder={handleReorder}
                     onWeightChange={handleWeightChange}
                     onWeightSet={handleWeightSet}
+                    onSelect={handleSelectLine}
                   />
                 </div>
 

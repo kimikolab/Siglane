@@ -12,12 +12,15 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { PromptLine, createPromptLine } from "@/types";
+import { PromptLine, PromptGroup, createPromptLine } from "@/types";
 import PromptLineItem, { WeightMode } from "./PromptLineItem";
 
 interface PromptLineListProps {
   lines: PromptLine[];
+  groups?: PromptGroup[];
   weightMode: WeightMode;
+  isSelectMode?: boolean;
+  selectedIds?: Set<string>;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, newText: string) => void;
@@ -26,11 +29,15 @@ interface PromptLineListProps {
   onReorder: (activeId: string, overId: string) => void;
   onWeightChange: (id: string, delta: number) => void;
   onWeightSet: (id: string, weight: number) => void;
+  onSelect?: (id: string, shiftKey: boolean) => void;
 }
 
 export default function PromptLineList({
   lines,
+  groups,
   weightMode,
+  isSelectMode = false,
+  selectedIds,
   onToggle,
   onDelete,
   onUpdate,
@@ -39,6 +46,7 @@ export default function PromptLineList({
   onReorder,
   onWeightChange,
   onWeightSet,
+  onSelect,
 }: PromptLineListProps) {
   // PointerSensorを使い、少し動かしてからドラッグ開始（クリックと区別するため）
   const sensors = useSensors(
@@ -70,12 +78,20 @@ export default function PromptLineList({
               key={line.id}
               line={line}
               weightMode={weightMode}
+              isSelectMode={isSelectMode}
+              isSelected={selectedIds?.has(line.id) ?? false}
+              groupLabel={
+                line.groupId
+                  ? groups?.find((g) => g.id === line.groupId)?.label
+                  : undefined
+              }
               onToggle={onToggle}
               onDelete={onDelete}
               onUpdate={onUpdate}
               onDuplicate={onDuplicate}
               onWeightChange={onWeightChange}
               onWeightSet={onWeightSet}
+              onSelect={onSelect}
             />
           ))}
 

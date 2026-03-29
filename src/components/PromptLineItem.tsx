@@ -10,23 +10,31 @@ export type WeightMode = "combined" | "none";
 interface PromptLineItemProps {
   line: PromptLine;
   weightMode: WeightMode;
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  groupLabel?: string;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, newText: string) => void;
   onDuplicate: (id: string) => void;
   onWeightChange: (id: string, delta: number) => void;
   onWeightSet: (id: string, weight: number) => void;
+  onSelect?: (id: string, shiftKey: boolean) => void;
 }
 
 export default function PromptLineItem({
   line,
   weightMode,
+  isSelectMode = false,
+  isSelected = false,
+  groupLabel,
   onToggle,
   onDelete,
   onUpdate,
   onDuplicate,
   onWeightChange,
   onWeightSet,
+  onSelect,
 }: PromptLineItemProps) {
   const [isEditing, setIsEditing] = useState(line.text === "");
   const [isEditingWeight, setIsEditingWeight] = useState(false);
@@ -40,7 +48,7 @@ export default function PromptLineItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: line.id });
+  } = useSortable({ id: line.id, disabled: isSelectMode });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -52,6 +60,14 @@ export default function PromptLineItem({
     if ((e.ctrlKey || e.metaKey) && e.key === "d") {
       e.preventDefault();
       onDuplicate(line.id);
+    }
+  };
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    if (isSelectMode && onSelect) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelect(line.id, e.shiftKey);
     }
   };
 
@@ -84,25 +100,48 @@ export default function PromptLineItem({
       ref={setNodeRef}
       style={style}
       className="flex items-center gap-1"
+      onClick={handleRowClick}
     >
       {/* 行本体（枠付き） */}
       <div
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        className={`flex-1 flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800 rounded border border-neutral-700/60 transition-opacity focus:outline-none focus:border-neutral-500 min-w-0 ${
-          line.enabled ? "opacity-100" : "opacity-40"
+        className={`flex-1 flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800 rounded border transition-opacity focus:outline-none min-w-0 ${
+          isSelectMode && isSelected
+            ? "border-sky-500/60 bg-sky-900/20"
+            : "border-neutral-700/60"
+        } ${line.enabled ? "opacity-100" : "opacity-40"} ${
+          isSelectMode ? "cursor-pointer" : ""
         }`}
       >
-        {/* ドラッグハンドル */}
-        <span
-          {...attributes}
-          {...listeners}
-          className="flex flex-col gap-[3px] py-1 px-0.5 cursor-grab active:cursor-grabbing select-none group/handle"
-        >
-          <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
-          <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
-          <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
-        </span>
+        {/* 選択モード: チェックボックス / 通常: ドラッグハンドル */}
+        {isSelectMode ? (
+          <span className="flex items-center justify-center w-5 h-5 flex-shrink-0">
+            <span
+              className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                isSelected
+                  ? "bg-sky-500 border-sky-500"
+                  : "border-neutral-500 hover:border-neutral-400"
+              }`}
+            >
+              {isSelected && (
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                  <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </span>
+          </span>
+        ) : (
+          <span
+            {...attributes}
+            {...listeners}
+            className="flex flex-col gap-[3px] py-1 px-0.5 cursor-grab active:cursor-grabbing select-none group/handle"
+          >
+            <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
+            <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
+            <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
+          </span>
+        )}
 
         {/* ON/OFFトグル */}
         <button
@@ -162,12 +201,21 @@ export default function PromptLineItem({
           />
         ) : (
           <span
-            onClick={() => setIsEditing(true)}
-            className={`flex-1 text-sm font-mono cursor-text min-w-0 truncate ${
+            onClick={() => { if (!isSelectMode) setIsEditing(true); }}
+            className={`flex-1 text-sm font-mono min-w-0 truncate ${
+              isSelectMode ? "cursor-pointer" : "cursor-text"
+            } ${
               line.enabled ? "text-neutral-100" : "text-neutral-500 line-through"
             }`}
           >
             {line.text}
+          </span>
+        )}
+
+        {/* グループバッジ */}
+        {groupLabel && !isEditing && (
+          <span className="text-[10px] text-neutral-500 bg-neutral-700/50 px-1.5 py-0.5 rounded flex-shrink-0">
+            {groupLabel}
           </span>
         )}
 
