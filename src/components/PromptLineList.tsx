@@ -131,12 +131,12 @@ export default function PromptLineList({
     [selectedIds, onSetGroup],
   );
 
-  // DnD: 選択モード中はセンサー無効
-  const pointerSensor = useSensor(PointerSensor, {
-    activationConstraint: { distance: 5 },
-  });
-  const normalSensors = useSensors(pointerSensor);
-  const emptySensors = useSensors();
+  // DnD: 選択モード中は発火距離を極大にして実質無効化（配列サイズ変更の警告回避）
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: isSelectMode ? 999999 : 5 },
+    }),
+  );
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -309,7 +309,7 @@ export default function PromptLineList({
       {viewMode === "flat" ? (
         /* --- フラットビュー --- */
         <DndContext
-          sensors={isSelectMode ? emptySensors : normalSensors}
+          sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
         >
