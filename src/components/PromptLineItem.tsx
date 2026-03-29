@@ -223,60 +223,49 @@ export default function PromptLineItem({
             >
               {line.text}
             </span>
-            {/* アノテーション（注釈） */}
-            {!isSelectMode && (
-              isEditingAnnotation ? (
-                <input
-                  type="text"
-                  value={annotationValue}
-                  onChange={(e) => setAnnotationValue(e.target.value)}
-                  autoFocus
-                  placeholder="説明を入力..."
-                  className="w-full bg-neutral-900 border border-neutral-600 rounded px-1.5 py-0.5 text-[11px] text-neutral-300 focus:outline-none focus:border-sky-500 mt-0.5"
-                  onClick={(e) => e.stopPropagation()}
-                  onBlur={() => {
+            {/* アノテーション表示（登録済みの場合のみテキスト下に表示） */}
+            {!isSelectMode && !isEditingAnnotation && annotation && (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAnnotationValue(annotation);
+                  setIsEditingAnnotation(true);
+                }}
+                className="text-[11px] text-neutral-500 truncate block cursor-text hover:text-neutral-400 mt-0.5"
+                title="Click to edit"
+              >
+                {annotation}
+              </span>
+            )}
+            {/* アノテーション編集中 */}
+            {!isSelectMode && isEditingAnnotation && (
+              <input
+                type="text"
+                value={annotationValue}
+                onChange={(e) => setAnnotationValue(e.target.value)}
+                autoFocus
+                placeholder="説明を入力..."
+                className="w-full bg-neutral-900 border border-neutral-600 rounded px-1.5 py-0.5 text-[11px] text-neutral-300 focus:outline-none focus:border-sky-500 mt-0.5"
+                onClick={(e) => e.stopPropagation()}
+                onBlur={() => {
+                  if (onSetAnnotation) {
+                    onSetAnnotation(line.text, annotationValue);
+                  }
+                  setIsEditingAnnotation(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
                     if (onSetAnnotation) {
                       onSetAnnotation(line.text, annotationValue);
                     }
                     setIsEditingAnnotation(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      if (onSetAnnotation) {
-                        onSetAnnotation(line.text, annotationValue);
-                      }
-                      setIsEditingAnnotation(false);
-                    }
-                    if (e.key === "Escape") {
-                      setIsEditingAnnotation(false);
-                    }
-                    e.stopPropagation();
-                  }}
-                />
-              ) : annotation ? (
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAnnotationValue(annotation);
-                    setIsEditingAnnotation(true);
-                  }}
-                  className="text-[11px] text-neutral-500 truncate block cursor-text hover:text-neutral-400 mt-0.5"
-                  title="Click to edit"
-                >
-                  {annotation}
-                </span>
-              ) : onSetAnnotation ? (
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setAnnotationValue("");
-                    setIsEditingAnnotation(true);
-                  }}
-                  className="text-[11px] text-neutral-700 hover:text-neutral-500 cursor-text mt-0.5 opacity-0 hover:opacity-100 transition-opacity"
-                >
-                  + 注釈
-                </span>
-              ) : null
+                  }
+                  if (e.key === "Escape") {
+                    setIsEditingAnnotation(false);
+                  }
+                  e.stopPropagation();
+                }}
+              />
             )}
           </div>
         )}
@@ -349,6 +338,21 @@ export default function PromptLineItem({
           <span className="text-[10px] text-sky-400/70 bg-sky-900/30 border border-sky-800/30 px-1.5 py-0.5 rounded flex-shrink-0">
             {groupLabel}
           </span>
+        )}
+
+        {/* 注釈追加ボタン（未登録時、バッジ横に表示） */}
+        {!isEditing && !isSelectMode && !annotation && onSetAnnotation && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setAnnotationValue("");
+              setIsEditingAnnotation(true);
+            }}
+            className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors flex-shrink-0 px-1"
+            title="注釈を追加"
+          >
+            📝
+          </button>
         )}
 
         {/* 重みコントロール */}
