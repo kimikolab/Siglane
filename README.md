@@ -30,7 +30,7 @@ Shift from **writing** prompts to **operating** them.
 
 - Auto-split comma-separated prompts into lines
 - Bracket-aware parsing — commas inside `()` `[]` `<>` are preserved
-- Line-by-line editing
+- Line-by-line editing — comma input auto-splits into multiple lines inheriting the group
 - Drag-and-drop reordering
 - Toggle each line ON/OFF
 - Line duplicate (Ctrl+D / ⌘+D)
@@ -47,16 +47,20 @@ Shift from **writing** prompts to **operating** them.
 - ComfyUI API integration — import API format workflow, send prompts directly to ComfyUI via `/prompt` endpoint (Ctrl+Enter shortcut)
 - Generation parameter panel — edit seed (random/fixed), cfg, steps, sampler, scheduler, denoise directly in Siglane without switching to ComfyUI
 - Connection settings — configurable ComfyUI server URL with connection test
-- Prompt line grouping — assign lines to categories (Quality, Character, Hair, Clothing, etc.) via multi-select mode
+- Prompt line grouping — assign lines to categories (Quality, Character, Hair, Clothing, etc.) via multi-select mode or per-line badge click
 - Per-section select mode — independent selection for Positive/Negative with action bar (Set Group, ON/OFF, Ungroup, All/None)
+- Outline view — group-based structural view with collapsible groups, group-level ON/OFF toggle, and group header select
+- Dictionary presets — save a group as a named preset, replace a group with a saved preset (existing lines turned OFF, preset lines inserted ON)
+- Prompt annotations — add descriptions to prompt tags (e.g. `masterpiece` → "highest quality tag"), displayed inline below each line, stored globally across sessions
+- Bulk notes — export unannotated tags, paste into external AI for translation, import descriptions back in bulk
+- Auto-grouping — tags automatically assigned to their default group based on prior grouping history
 - Auto-save via localStorage
 
 ### v2 (Planned)
 
-- Prompt dictionary (register, browse, one-click insert)
-- Group presets (save/replace groups like Clothing sets)
-- Outline view — group-based structural view with bulk operations
-- JSON export / import
+- Prompt dictionary browsing UI (search, filter, manage presets)
+- Preset path-based organization (e.g. "Misaki/casual", "Misaki/formal")
+- JSON export / import for dictionary backup
 
 ### Future
 
@@ -85,7 +89,7 @@ Siglane is not just a prompt formatter — it is an environment for treating pro
 
 - **MVP** ✅ — Make prompt editing comfortable
 - **v1.5** ✅ — Direct generation from Siglane + prompt grouping
-- **v2** — Turn prompts into reusable assets (dictionary + presets)
+- **v2** ✅ — Turn prompts into reusable assets (presets + annotations + auto-grouping)
 - **Future** — Become a prompt research environment
 
 ---
@@ -101,7 +105,10 @@ Siglane is not just a prompt formatter — it is an environment for treating pro
 - Round-trip editing with ComfyUI via workflow JSON import/export
 - Direct generation from Siglane — edit prompts, tweak cfg/steps/sampler, hit Generate
 - Group prompt lines by role (Clothing, Hair, Expression) for quick identification and bulk operations
-- Swap entire groups (e.g. replace formal outfit with casual) without manual line-by-line editing
+- Swap entire groups (e.g. replace formal outfit with casual) using saved presets
+- Annotate prompt tags with descriptions — build a personal glossary that works across all sessions
+- Bulk-translate unknown tags via external AI and import annotations at once
+- Auto-group familiar tags — once grouped, tags are automatically categorized in new sessions
 
 ---
 
