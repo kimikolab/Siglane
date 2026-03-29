@@ -38,6 +38,7 @@ import {
   isApiParseError,
   formatApiGenerationParams,
   writePromptsToApiWorkflow,
+  randomizeSeed,
   queuePrompt,
   loadComfySettings,
   saveComfySettings,
@@ -653,7 +654,10 @@ export default function Home() {
       negativeText,
     );
 
-    const result = await queuePrompt(conn, updatedWorkflow as ComfyApiWorkflow);
+    // seedをランダム化（毎回異なる結果を得るため）
+    const finalWorkflow = randomizeSeed(updatedWorkflow);
+
+    const result = await queuePrompt(conn, finalWorkflow);
 
     setIsGenerating(false);
 

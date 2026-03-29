@@ -279,6 +279,25 @@ export function writePromptsToApiWorkflow(
   return wf;
 }
 
+// サンプラーノードのseedをランダム化する
+// ComfyUIのUI上では control_after_generate で自動ランダム化されるが、
+// API形式ではその仕組みがないため、送信前に手動でランダム化する
+export function randomizeSeed(workflow: ComfyApiWorkflow): ComfyApiWorkflow {
+  const wf = { ...workflow };
+  for (const [nodeId, node] of Object.entries(wf)) {
+    if (typeof node.inputs?.seed === "number") {
+      wf[nodeId] = {
+        ...node,
+        inputs: {
+          ...node.inputs,
+          seed: Math.floor(Math.random() * 2 ** 32),
+        },
+      };
+    }
+  }
+  return wf;
+}
+
 // --- API送信 ---
 
 export interface QueueResult {
