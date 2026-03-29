@@ -162,6 +162,12 @@ export function duplicateSession(
       ...l,
       id: crypto.randomUUID(),
     })),
+    positiveGroups: source.positiveGroups
+      ? source.positiveGroups.map((g) => ({ ...g }))
+      : undefined,
+    negativeGroups: source.negativeGroups
+      ? source.negativeGroups.map((g) => ({ ...g }))
+      : undefined,
     memo: source.memo,
     updatedAt: new Date().toISOString(),
     folderId: source.folderId,
