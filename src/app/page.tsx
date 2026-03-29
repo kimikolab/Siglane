@@ -13,6 +13,7 @@ import {
   joinPromptLines,
   joinAllPromptLines,
   createSession,
+  createPromptLine,
   createFolder,
   canCreateSubfolder,
   duplicateSession,
@@ -627,6 +628,39 @@ export default function Home() {
       }
     },
     [handleSetGroup, updateActiveSession],
+  );
+
+  // グループのプリセット差し替え
+  // 既存のグループ行をOFFにして、プリセットの行をON状態で挿入
+  const handleReplaceGroup = useCallback(
+    (type: "positive" | "negative", groupId: string, groupLabel: string, newPrompts: string[]) => {
+      const linesKey = type === "positive" ? "positiveLines" : "negativeLines";
+      updateActiveSession((s) => {
+        const lines = [...(s[linesKey] as PromptLine[])];
+
+        // 既存のグループ行をOFFに
+        let lastGroupIndex = -1;
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].groupId === groupId) {
+            lines[i] = { ...lines[i], enabled: false };
+            lastGroupIndex = i;
+          }
+        }
+
+        // 新しい行を作成（同じgroupIdを付与）
+        const newLines = newPrompts.map((text) => ({
+          ...createPromptLine(text),
+          groupId,
+        }));
+
+        // 最後のグループ行の直後に挿入
+        const insertAt = lastGroupIndex === -1 ? lines.length : lastGroupIndex + 1;
+        lines.splice(insertAt, 0, ...newLines);
+
+        return { ...s, [linesKey]: lines };
+      });
+    },
+    [updateActiveSession],
   );
 
   const isTemplateActive = activeSession?.isTemplate ?? false;
@@ -1287,6 +1321,7 @@ export default function Home() {
                     onBulkToggle={handleSectionBulkToggle}
                     onUngroup={handleUngroup}
                     onSetLineGroup={handleSetLineGroup}
+                    onReplaceGroup={handleReplaceGroup}
                   />
                 </div>
 

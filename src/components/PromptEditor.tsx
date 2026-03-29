@@ -27,6 +27,7 @@ interface PromptEditorProps {
   onBulkToggle: (type: "positive" | "negative", lineIds: string[], enabled: boolean) => void;
   onUngroup: (type: "positive" | "negative", lineIds: string[]) => void;
   onSetLineGroup: (type: "positive" | "negative", id: string, groupLabel: string | null) => void;
+  onReplaceGroup: (type: "positive" | "negative", groupId: string, groupLabel: string, newPrompts: string[]) => void;
 }
 
 export default function PromptEditor({
@@ -48,6 +49,7 @@ export default function PromptEditor({
   onBulkToggle,
   onUngroup,
   onSetLineGroup,
+  onReplaceGroup,
 }: PromptEditorProps) {
   return (
     <div>
@@ -72,6 +74,7 @@ export default function PromptEditor({
         onBulkToggle={(ids, enabled) => onBulkToggle("positive", ids, enabled)}
         onUngroup={(ids) => onUngroup("positive", ids)}
         onSetLineGroup={(id, label) => onSetLineGroup("positive", id, label)}
+        onReplaceGroup={(gid, label, prompts) => onReplaceGroup("positive", gid, label, prompts)}
       />
 
       <div className="mt-4" />
@@ -97,6 +100,7 @@ export default function PromptEditor({
         onBulkToggle={(ids, enabled) => onBulkToggle("negative", ids, enabled)}
         onUngroup={(ids) => onUngroup("negative", ids)}
         onSetLineGroup={(id, label) => onSetLineGroup("negative", id, label)}
+        onReplaceGroup={(gid, label, prompts) => onReplaceGroup("negative", gid, label, prompts)}
       />
     </div>
   );

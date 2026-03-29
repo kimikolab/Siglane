@@ -29,6 +29,16 @@ export const DEFAULT_GROUP_CATEGORIES = [
   "Style",
 ] as const;
 
+// 辞書エントリ（プリセット）
+export interface DictionaryEntry {
+  id: string;
+  label: string;
+  category: string;
+  prompts: string[];
+  note?: string;
+  createdAt: string;
+}
+
 // 1セッション（旧SiglaneState + メタ情報）
 export interface Session {
   id: string;

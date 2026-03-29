@@ -16,10 +16,16 @@ import {
 import {
   PromptLine,
   PromptGroup,
+  DictionaryEntry,
   DEFAULT_GROUP_CATEGORIES,
   createPromptLine,
 } from "@/types";
 import PromptLineItem, { WeightMode } from "./PromptLineItem";
+import {
+  addEntry,
+  createEntry,
+  getEntriesByCategory,
+} from "@/utils/dictionary";
 
 interface PromptLineListProps {
   sectionLabel: string;
@@ -40,6 +46,7 @@ interface PromptLineListProps {
   onBulkToggle: (lineIds: string[], enabled: boolean) => void;
   onUngroup: (lineIds: string[]) => void;
   onSetLineGroup: (id: string, groupLabel: string | null) => void;
+  onReplaceGroup: (groupId: string, groupLabel: string, newPrompts: string[]) => void;
 }
 
 export default function PromptLineList({
@@ -61,6 +68,7 @@ export default function PromptLineList({
   onBulkToggle,
   onUngroup,
   onSetLineGroup,
+  onReplaceGroup,
 }: PromptLineListProps) {
   // --- 選択モード（セクション内部管理） ---
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -70,6 +78,11 @@ export default function PromptLineList({
   const [newGroupName, setNewGroupName] = useState("");
   // --- アウトラインビューの折りたたみ ---
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // --- プリセット保存/差し替え ---
+  const [savingGroupId, setSavingGroupId] = useState<string | null>(null);
+  const [savePresetName, setSavePresetName] = useState("");
+  const [replacingGroupId, setReplacingGroupId] = useState<string | null>(null);
+  const [presetToast, setPresetToast] = useState<string | null>(null);
 
   const exitSelectMode = useCallback(() => {
     setIsSelectMode(false);
@@ -91,6 +104,13 @@ export default function PromptLineList({
       window.removeEventListener("keyup", up);
     };
   }, []);
+
+  // --- プリセットトースト自動消去 ---
+  useEffect(() => {
+    if (!presetToast) return;
+    const timer = setTimeout(() => setPresetToast(null), 2500);
+    return () => clearTimeout(timer);
+  }, [presetToast]);
 
   const handleSelect = useCallback(
     (id: string, _shiftKey: boolean) => {
@@ -432,6 +452,107 @@ export default function PromptLineList({
                       ({enabledCount}/{groupLines.length})
                     </span>
                     <div className="flex-1" />
+                    {/* Save / Replace（Ungroupedセクション以外） */}
+                    {groupId !== "__ungrouped__" && !isSelectMode && (
+                      <div className="flex items-center gap-1">
+                        {/* Save preset */}
+                        {savingGroupId === groupId ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={savePresetName}
+                              onChange={(e) => setSavePresetName(e.target.value)}
+                              placeholder="Preset name..."
+                              autoFocus
+                              className="w-28 bg-neutral-900 border border-neutral-600 rounded px-1.5 py-0.5 text-[11px] text-neutral-200 focus:outline-none focus:border-sky-500"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && savePresetName.trim()) {
+                                  const prompts = groupLines.map((l) => l.text);
+                                  addEntry(
+                                    createEntry(savePresetName.trim(), label, prompts),
+                                  );
+                                  setSavingGroupId(null);
+                                  setSavePresetName("");
+                                  setPresetToast(`Saved "${savePresetName.trim()}" to dictionary`);
+                                }
+                                if (e.key === "Escape") {
+                                  setSavingGroupId(null);
+                                  setSavePresetName("");
+                                }
+                              }}
+                              onBlur={() => {
+                                setSavingGroupId(null);
+                                setSavePresetName("");
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setSavingGroupId(groupId);
+                              setReplacingGroupId(null);
+                            }}
+                            className="px-1.5 py-0.5 text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
+                            title="Save as preset"
+                          >
+                            💾
+                          </button>
+                        )}
+                        {/* Replace */}
+                        <div className="relative">
+                          <button
+                            onClick={() => {
+                              setReplacingGroupId(
+                                replacingGroupId === groupId ? null : groupId,
+                              );
+                              setSavingGroupId(null);
+                            }}
+                            className="px-1.5 py-0.5 text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
+                            title="Replace with preset"
+                          >
+                            🔄
+                          </button>
+                          {replacingGroupId === groupId && (
+                            <div
+                              className="absolute top-full right-0 mt-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[180px] max-h-[240px] overflow-y-auto"
+                              style={{ zIndex: 50 }}
+                            >
+                              {(() => {
+                                const presets = getEntriesByCategory(label);
+                                if (presets.length === 0) {
+                                  return (
+                                    <p className="px-3 py-2 text-xs text-neutral-500">
+                                      No presets for &quot;{label}&quot;
+                                    </p>
+                                  );
+                                }
+                                return presets.map((preset) => (
+                                  <button
+                                    key={preset.id}
+                                    onClick={() => {
+                                      onReplaceGroup(groupId, label, preset.prompts);
+                                      setReplacingGroupId(null);
+                                      setPresetToast(
+                                        `Replaced with "${preset.label}"`,
+                                      );
+                                    }}
+                                    className="w-full text-left px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700 transition-colors"
+                                    title={preset.prompts.join(", ")}
+                                  >
+                                    <span className="font-medium">
+                                      {preset.label}
+                                    </span>
+                                    <span className="text-neutral-500 ml-1.5">
+                                      ({preset.prompts.length})
+                                    </span>
+                                  </button>
+                                ));
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     <button
                       onClick={() => onBulkToggle(groupLineIds, !allEnabled)}
                       className={`px-1.5 py-0.5 text-[10px] rounded transition-colors ${
@@ -482,6 +603,13 @@ export default function PromptLineList({
               </>
             );
           })()}
+        </div>
+      )}
+
+      {/* プリセットトースト */}
+      {presetToast && (
+        <div className="mt-2 px-3 py-1.5 bg-green-900/60 border border-green-700/40 rounded text-xs text-green-300">
+          {presetToast}
         </div>
       )}
     </div>
