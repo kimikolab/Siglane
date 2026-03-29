@@ -116,6 +116,7 @@ export default function Home() {
   const [isRenamingHeader, setIsRenamingHeader] = useState(false);
   const [headerRenameValue, setHeaderRenameValue] = useState("");
   const [weightMode, setWeightMode] = useState<WeightMode>("combined");
+  const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
   const isInitial = useRef(true);
 
   // --- localStorage読み込み ---
@@ -1213,12 +1214,45 @@ export default function Home() {
                 </div>
 
                 <div className="mb-6">
+                  {/* ビュー切り替えトグル */}
+                  <div className="flex items-center gap-1 mb-3">
+                    <button
+                      onClick={() => setViewMode("flat")}
+                      className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                        viewMode === "flat"
+                          ? "bg-neutral-700 text-neutral-200"
+                          : "text-neutral-500 hover:text-neutral-300"
+                      }`}
+                      title="Flat view — original prompt order"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M2 3h12M2 7h12M2 11h12" />
+                      </svg>
+                      Flat
+                    </button>
+                    <button
+                      onClick={() => setViewMode("outline")}
+                      className={`flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors ${
+                        viewMode === "outline"
+                          ? "bg-neutral-700 text-neutral-200"
+                          : "text-neutral-500 hover:text-neutral-300"
+                      }`}
+                      title="Outline view — grouped by category"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M2 2h5v5H2zM9 3h5M9 6h4M2 9h5v5H2zM9 10h5M9 13h4" />
+                      </svg>
+                      Outline
+                    </button>
+                  </div>
+
                   <PromptEditor
                     positiveLines={activeSession.positiveLines}
                     negativeLines={activeSession.negativeLines}
                     positiveGroups={activeSession.positiveGroups}
                     negativeGroups={activeSession.negativeGroups}
                     weightMode={weightMode}
+                    viewMode={viewMode}
                     onToggle={handleToggle}
                     onDelete={handleDelete}
                     onUpdate={handleUpdate}

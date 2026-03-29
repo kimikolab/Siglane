@@ -27,6 +27,7 @@ interface PromptLineListProps {
   lines: PromptLine[];
   groups?: PromptGroup[];
   weightMode: WeightMode;
+  viewMode: "flat" | "outline";
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, newText: string) => void;
@@ -46,6 +47,7 @@ export default function PromptLineList({
   lines,
   groups,
   weightMode,
+  viewMode,
   onToggle,
   onDelete,
   onUpdate,
@@ -64,6 +66,8 @@ export default function PromptLineList({
   const lastSelectedId = useRef<string | null>(null);
   const [showGroupDropdown, setShowGroupDropdown] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  // --- アウトラインビューの折りたたみ ---
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const exitSelectMode = useCallback(() => {
     setIsSelectMode(false);
@@ -302,47 +306,155 @@ export default function PromptLineList({
       )}
 
       {/* 行リスト */}
-      <DndContext
-        sensors={isSelectMode ? emptySensors : normalSensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={lines.map((l) => l.id)}
-          strategy={verticalListSortingStrategy}
+      {viewMode === "flat" ? (
+        /* --- フラットビュー --- */
+        <DndContext
+          sensors={isSelectMode ? emptySensors : normalSensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
         >
-          <div className="flex flex-col gap-0.5">
-            {lines.map((line) => (
-              <PromptLineItem
-                key={line.id}
-                line={line}
-                weightMode={weightMode}
-                isSelectMode={isSelectMode}
-                isSelected={selectedIds.has(line.id)}
-                groupLabel={
-                  line.groupId
-                    ? groups?.find((g) => g.id === line.groupId)?.label
-                    : undefined
-                }
-                onToggle={onToggle}
-                onDelete={onDelete}
-                onUpdate={onUpdate}
-                onDuplicate={onDuplicate}
-                onWeightChange={onWeightChange}
-                onWeightSet={onWeightSet}
-                onSelect={handleSelect}
-              />
-            ))}
+          <SortableContext
+            items={lines.map((l) => l.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="flex flex-col gap-0.5">
+              {lines.map((line) => (
+                <PromptLineItem
+                  key={line.id}
+                  line={line}
+                  weightMode={weightMode}
+                  isSelectMode={isSelectMode}
+                  isSelected={selectedIds.has(line.id)}
+                  groupLabel={
+                    line.groupId
+                      ? groups?.find((g) => g.id === line.groupId)?.label
+                      : undefined
+                  }
+                  onToggle={onToggle}
+                  onDelete={onDelete}
+                  onUpdate={onUpdate}
+                  onDuplicate={onDuplicate}
+                  onWeightChange={onWeightChange}
+                  onWeightSet={onWeightSet}
+                  onSelect={handleSelect}
+                />
+              ))}
 
-            <button
-              onClick={() => onAdd(createPromptLine(""))}
-              className="flex justify-center py-1 text-neutral-600 hover:text-neutral-400 border border-dashed border-neutral-700 rounded-lg transition-colors"
-            >
-              +
-            </button>
-          </div>
-        </SortableContext>
-      </DndContext>
+              <button
+                onClick={() => onAdd(createPromptLine(""))}
+                className="flex justify-center py-1 text-neutral-600 hover:text-neutral-400 border border-dashed border-neutral-700 rounded-lg transition-colors"
+              >
+                +
+              </button>
+            </div>
+          </SortableContext>
+        </DndContext>
+      ) : (
+        /* --- アウトラインビュー --- */
+        <div className="flex flex-col gap-3">
+          {(() => {
+            // グループごとに行を分類
+            const groupedLines = new Map<string, PromptLine[]>();
+            const ungrouped: PromptLine[] = [];
+            const sortedGroups = [...(groups ?? [])].sort(
+              (a, b) => a.order - b.order,
+            );
+
+            for (const line of lines) {
+              if (line.groupId) {
+                const arr = groupedLines.get(line.groupId) ?? [];
+                arr.push(line);
+                groupedLines.set(line.groupId, arr);
+              } else {
+                ungrouped.push(line);
+              }
+            }
+
+            const renderGroup = (
+              groupId: string,
+              label: string,
+              groupLines: PromptLine[],
+            ) => {
+              const isCollapsed = collapsedGroups.has(groupId);
+              const enabledCount = groupLines.filter((l) => l.enabled).length;
+              const allEnabled = enabledCount === groupLines.length;
+              const groupLineIds = groupLines.map((l) => l.id);
+
+              return (
+                <div key={groupId}>
+                  {/* グループヘッダー */}
+                  <div className="flex items-center gap-2 px-2 py-1.5 bg-neutral-800/60 rounded-t border border-neutral-700/40">
+                    <button
+                      onClick={() =>
+                        setCollapsedGroups((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(groupId)) next.delete(groupId);
+                          else next.add(groupId);
+                          return next;
+                        })
+                      }
+                      className="text-neutral-400 hover:text-neutral-200 transition-colors text-xs w-4"
+                    >
+                      {isCollapsed ? "▶" : "▼"}
+                    </button>
+                    <span className="text-xs font-medium text-sky-400/80">
+                      {label}
+                    </span>
+                    <span className="text-[10px] text-neutral-500">
+                      ({enabledCount}/{groupLines.length})
+                    </span>
+                    <div className="flex-1" />
+                    <button
+                      onClick={() => onBulkToggle(groupLineIds, !allEnabled)}
+                      className={`px-1.5 py-0.5 text-[10px] rounded transition-colors ${
+                        allEnabled
+                          ? "bg-green-800/40 text-green-400 hover:bg-green-800/60"
+                          : "bg-neutral-700/50 text-neutral-400 hover:bg-neutral-700"
+                      }`}
+                      title={allEnabled ? "Turn all OFF" : "Turn all ON"}
+                    >
+                      {allEnabled ? "ON" : "OFF"}
+                    </button>
+                  </div>
+                  {/* グループ内の行 */}
+                  {!isCollapsed && (
+                    <div className="flex flex-col gap-0.5 border-x border-b border-neutral-700/40 rounded-b px-1 py-1">
+                      {groupLines.map((line) => (
+                        <PromptLineItem
+                          key={line.id}
+                          line={line}
+                          weightMode={weightMode}
+                          isSelectMode={isSelectMode}
+                          isSelected={selectedIds.has(line.id)}
+                          onToggle={onToggle}
+                          onDelete={onDelete}
+                          onUpdate={onUpdate}
+                          onDuplicate={onDuplicate}
+                          onWeightChange={onWeightChange}
+                          onWeightSet={onWeightSet}
+                          onSelect={handleSelect}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            };
+
+            return (
+              <>
+                {sortedGroups.map((group) => {
+                  const groupLines = groupedLines.get(group.id);
+                  if (!groupLines || groupLines.length === 0) return null;
+                  return renderGroup(group.id, group.label, groupLines);
+                })}
+                {ungrouped.length > 0 &&
+                  renderGroup("__ungrouped__", "Ungrouped", ungrouped)}
+              </>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 }

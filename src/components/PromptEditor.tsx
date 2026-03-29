@@ -10,6 +10,7 @@ interface PromptEditorProps {
   positiveGroups?: PromptGroup[];
   negativeGroups?: PromptGroup[];
   weightMode: WeightMode;
+  viewMode: "flat" | "outline";
   onToggle: (type: "positive" | "negative", id: string) => void;
   onDelete: (type: "positive" | "negative", id: string) => void;
   onUpdate: (type: "positive" | "negative", id: string, text: string) => void;
@@ -33,6 +34,7 @@ export default function PromptEditor({
   positiveGroups,
   negativeGroups,
   weightMode,
+  viewMode,
   onToggle,
   onDelete,
   onUpdate,
@@ -53,6 +55,7 @@ export default function PromptEditor({
         lines={positiveLines}
         groups={positiveGroups}
         weightMode={weightMode}
+        viewMode={viewMode}
         onToggle={(id) => onToggle("positive", id)}
         onDelete={(id) => onDelete("positive", id)}
         onUpdate={(id, text) => onUpdate("positive", id, text)}
@@ -76,6 +79,7 @@ export default function PromptEditor({
         lines={negativeLines}
         groups={negativeGroups}
         weightMode={weightMode}
+        viewMode={viewMode}
         onToggle={(id) => onToggle("negative", id)}
         onDelete={(id) => onDelete("negative", id)}
         onUpdate={(id, text) => onUpdate("negative", id, text)}
