@@ -24,23 +24,25 @@ export function saveAnnotations(annotations: Annotations): void {
 // 重み記法を除去して正規化: "(soft lighting:1.2)" → "soft lighting"
 export function normalizeForLookup(text: string): string {
   let t = text.trim();
-  // (tag:weight) → tag
-  const weightMatch = t.match(/^\((.+):\d+\.?\d*\)$/);
-  if (weightMatch) t = weightMatch[1];
-  // ((tag)) → tag
+  // (tag:weight) → tag — 数値にスペースが入るケースにも対応
+  const weightMatch = t.match(/^\((.+):[\d\s.]+\)$/);
+  if (weightMatch) t = weightMatch[1].trim();
+  // ((tag)) → tag — 多重括弧を外す
   while (t.startsWith("(") && t.endsWith(")")) {
     const inner = t.slice(1, -1);
     if (inner.includes("(") || inner.includes(")")) break;
     t = inner;
   }
   // [tag] or [tag:weight] → tag
-  const bracketMatch = t.match(/^\[(.+?)(?::\d+\.?\d*)?\]$/);
-  if (bracketMatch) t = bracketMatch[1];
+  const bracketMatch = t.match(/^\[(.+?)(?::[\d\s.]+)?\]$/);
+  if (bracketMatch) t = bracketMatch[1].trim();
   // <lora:name:weight> → lora:name
-  const loraMatch = t.match(/^<lora:(.+?):\d+\.?\d*>$/);
+  const loraMatch = t.match(/^<lora:(.+?):[\d\s.]+>$/);
   if (loraMatch) t = `lora:${loraMatch[1]}`;
+  // 末尾の :weight を除去（括弧なしで weight が付いている場合）
+  t = t.replace(/:[\d\s.]+$/, "").trim();
 
-  return t.trim().toLowerCase();
+  return t.toLowerCase();
 }
 
 export function getAnnotation(

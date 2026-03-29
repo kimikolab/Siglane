@@ -1843,17 +1843,61 @@ export default function Home() {
                         });
 
                         // デフォルトグループを登録
-                        setDefaultGroups((prev) => {
-                          let updated = prev;
-                          for (const { key, category: cat } of parsed) {
-                            if (cat) {
-                              updated = { ...updated, [key]: cat };
-                              groupCount++;
-                            }
+                        const newDefaults: Record<string, string> = {};
+                        for (const { key, category: cat } of parsed) {
+                          if (cat) {
+                            newDefaults[key] = cat;
+                            groupCount++;
                           }
-                          if (groupCount > 0) saveDefaultGroups(updated);
-                          return updated;
-                        });
+                        }
+                        if (groupCount > 0) {
+                          setDefaultGroups((prev) => {
+                            const updated = { ...prev, ...newDefaults };
+                            saveDefaultGroups(updated);
+                            return updated;
+                          });
+
+                          // 現在のセッションにデフォルトグループを即時適用
+                          updateActiveSession((s) => {
+                            const applyDefaults = (
+                              lines: PromptLine[],
+                              groups: PromptGroup[] | undefined,
+                              dg: Record<string, string>,
+                            ) => {
+                              const gs = [...(groups ?? [])];
+                              const updated = lines.map((l) => {
+                                if (l.groupId) return l;
+                                const label = dg[normalizeForLookup(l.text)];
+                                if (!label) return l;
+                                let g = gs.find((g) => g.label === label);
+                                if (!g) {
+                                  g = { id: crypto.randomUUID(), label, order: gs.length };
+                                  gs.push(g);
+                                }
+                                return { ...l, groupId: g.id };
+                              });
+                              return { lines: updated, groups: gs };
+                            };
+
+                            const pos = applyDefaults(
+                              s.positiveLines,
+                              s.positiveGroups,
+                              newDefaults,
+                            );
+                            const neg = applyDefaults(
+                              s.negativeLines,
+                              s.negativeGroups,
+                              newDefaults,
+                            );
+                            return {
+                              ...s,
+                              positiveLines: pos.lines,
+                              positiveGroups: pos.groups,
+                              negativeLines: neg.lines,
+                              negativeGroups: neg.groups,
+                            };
+                          });
+                        }
                       }
 
                       setShowBulkAnnotation(false);
