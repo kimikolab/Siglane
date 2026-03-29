@@ -10,8 +10,6 @@ interface PromptEditorProps {
   positiveGroups?: PromptGroup[];
   negativeGroups?: PromptGroup[];
   weightMode: WeightMode;
-  isSelectMode: boolean;
-  selectedIds: Set<string>;
   onToggle: (type: "positive" | "negative", id: string) => void;
   onDelete: (type: "positive" | "negative", id: string) => void;
   onUpdate: (type: "positive" | "negative", id: string, text: string) => void;
@@ -24,7 +22,9 @@ interface PromptEditorProps {
   ) => void;
   onWeightChange: (type: "positive" | "negative", id: string, delta: number) => void;
   onWeightSet: (type: "positive" | "negative", id: string, weight: number) => void;
-  onSelect: (id: string, shiftKey: boolean) => void;
+  onSetGroup: (type: "positive" | "negative", lineIds: string[], groupLabel: string) => void;
+  onBulkToggle: (type: "positive" | "negative", lineIds: string[], enabled: boolean) => void;
+  onUngroup: (type: "positive" | "negative", lineIds: string[]) => void;
 }
 
 export default function PromptEditor({
@@ -33,8 +33,6 @@ export default function PromptEditor({
   positiveGroups,
   negativeGroups,
   weightMode,
-  isSelectMode,
-  selectedIds,
   onToggle,
   onDelete,
   onUpdate,
@@ -43,23 +41,18 @@ export default function PromptEditor({
   onReorder,
   onWeightChange,
   onWeightSet,
-  onSelect,
+  onSetGroup,
+  onBulkToggle,
+  onUngroup,
 }: PromptEditorProps) {
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs text-neutral-300 uppercase tracking-wider">
-          Positive prompt
-        </span>
-        <div className="flex-1 h-px bg-neutral-700" />
-      </div>
-
       <PromptLineList
+        sectionLabel="Positive prompt"
+        sectionColor="text-neutral-300"
         lines={positiveLines}
         groups={positiveGroups}
         weightMode={weightMode}
-        isSelectMode={isSelectMode}
-        selectedIds={selectedIds}
         onToggle={(id) => onToggle("positive", id)}
         onDelete={(id) => onDelete("positive", id)}
         onUpdate={(id, text) => onUpdate("positive", id, text)}
@@ -70,22 +63,19 @@ export default function PromptEditor({
         }
         onWeightChange={(id, delta) => onWeightChange("positive", id, delta)}
         onWeightSet={(id, weight) => onWeightSet("positive", id, weight)}
-        onSelect={onSelect}
+        onSetGroup={(ids, label) => onSetGroup("positive", ids, label)}
+        onBulkToggle={(ids, enabled) => onBulkToggle("positive", ids, enabled)}
+        onUngroup={(ids) => onUngroup("positive", ids)}
       />
 
-      <div className="flex items-center gap-2 mt-4 mb-2">
-        <span className="text-xs text-amber-800 uppercase tracking-wider">
-          Negative prompt
-        </span>
-        <div className="flex-1 h-px bg-neutral-700" />
-      </div>
+      <div className="mt-4" />
 
       <PromptLineList
+        sectionLabel="Negative prompt"
+        sectionColor="text-amber-800"
         lines={negativeLines}
         groups={negativeGroups}
         weightMode={weightMode}
-        isSelectMode={isSelectMode}
-        selectedIds={selectedIds}
         onToggle={(id) => onToggle("negative", id)}
         onDelete={(id) => onDelete("negative", id)}
         onUpdate={(id, text) => onUpdate("negative", id, text)}
@@ -96,7 +86,9 @@ export default function PromptEditor({
         }
         onWeightChange={(id, delta) => onWeightChange("negative", id, delta)}
         onWeightSet={(id, weight) => onWeightSet("negative", id, weight)}
-        onSelect={onSelect}
+        onSetGroup={(ids, label) => onSetGroup("negative", ids, label)}
+        onBulkToggle={(ids, enabled) => onBulkToggle("negative", ids, enabled)}
+        onUngroup={(ids) => onUngroup("negative", ids)}
       />
     </div>
   );
