@@ -229,11 +229,16 @@ export default function PromptLineItem({
               className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
                 groupLabel
                   ? "text-sky-400/70 bg-sky-900/30 border border-sky-800/30 hover:bg-sky-900/50"
-                  : "text-neutral-600 hover:text-neutral-400"
+                  : "text-neutral-500 hover:text-neutral-300 border border-dashed border-neutral-600 hover:border-neutral-400"
               }`}
               title={groupLabel ? "Change group" : "Set group"}
             >
-              {groupLabel ?? "+"}
+              {groupLabel ?? (
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="inline-block">
+                  <path d="M1 3v5l7 6 5-5-6-7H2a1 1 0 0 0-1 1z" />
+                  <circle cx="5" cy="5" r="1" fill="currentColor" stroke="none" />
+                </svg>
+              )}
             </button>
             {showBadgeDropdown && (
               <div
