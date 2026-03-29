@@ -28,6 +28,8 @@ interface PromptEditorProps {
   onUngroup: (type: "positive" | "negative", lineIds: string[]) => void;
   onSetLineGroup: (type: "positive" | "negative", id: string, groupLabel: string | null) => void;
   onReplaceGroup: (type: "positive" | "negative", groupId: string, groupLabel: string, newPrompts: string[]) => void;
+  annotations: Record<string, string>;
+  onSetAnnotation: (text: string, description: string) => void;
 }
 
 export default function PromptEditor({
@@ -50,6 +52,8 @@ export default function PromptEditor({
   onUngroup,
   onSetLineGroup,
   onReplaceGroup,
+  annotations,
+  onSetAnnotation,
 }: PromptEditorProps) {
   return (
     <div>
@@ -60,6 +64,8 @@ export default function PromptEditor({
         groups={positiveGroups}
         weightMode={weightMode}
         viewMode={viewMode}
+        annotations={annotations}
+        onSetAnnotation={onSetAnnotation}
         onToggle={(id) => onToggle("positive", id)}
         onDelete={(id) => onDelete("positive", id)}
         onUpdate={(id, text) => onUpdate("positive", id, text)}
@@ -86,6 +92,8 @@ export default function PromptEditor({
         groups={negativeGroups}
         weightMode={weightMode}
         viewMode={viewMode}
+        annotations={annotations}
+        onSetAnnotation={onSetAnnotation}
         onToggle={(id) => onToggle("negative", id)}
         onDelete={(id) => onDelete("negative", id)}
         onUpdate={(id, text) => onUpdate("negative", id, text)}

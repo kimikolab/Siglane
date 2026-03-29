@@ -21,6 +21,8 @@ interface PromptLineItemProps {
   onWeightSet: (id: string, weight: number) => void;
   onSelect?: (id: string, shiftKey: boolean) => void;
   onSetLineGroup?: (id: string, groupLabel: string | null) => void;
+  annotation?: string;
+  onSetAnnotation?: (text: string, description: string) => void;
 }
 
 export default function PromptLineItem({
@@ -37,12 +39,16 @@ export default function PromptLineItem({
   onWeightSet,
   onSelect,
   onSetLineGroup,
+  annotation,
+  onSetAnnotation,
 }: PromptLineItemProps) {
   const [isEditing, setIsEditing] = useState(line.text === "");
   const [isEditingWeight, setIsEditingWeight] = useState(false);
   const [weightInputValue, setWeightInputValue] = useState("");
   const weightInputRef = useRef<HTMLInputElement>(null);
   const [showBadgeDropdown, setShowBadgeDropdown] = useState(false);
+  const [isEditingAnnotation, setIsEditingAnnotation] = useState(false);
+  const [annotationValue, setAnnotationValue] = useState("");
 
   const {
     attributes,
@@ -206,16 +212,73 @@ export default function PromptLineItem({
             }}
           />
         ) : (
-          <span
-            onClick={() => { if (!isSelectMode) setIsEditing(true); }}
-            className={`flex-1 text-sm font-mono min-w-0 truncate ${
-              isSelectMode ? "cursor-pointer" : "cursor-text"
-            } ${
-              line.enabled ? "text-neutral-100" : "text-neutral-500 line-through"
-            }`}
+          <div
+            className={`flex-1 min-w-0 ${isSelectMode ? "cursor-pointer" : ""}`}
+            onClick={() => { if (!isSelectMode && !isEditingAnnotation) setIsEditing(true); }}
           >
-            {line.text}
-          </span>
+            <span
+              className={`text-sm font-mono truncate block ${
+                line.enabled ? "text-neutral-100" : "text-neutral-500 line-through"
+              }`}
+            >
+              {line.text}
+            </span>
+            {/* アノテーション（注釈） */}
+            {!isSelectMode && (
+              isEditingAnnotation ? (
+                <input
+                  type="text"
+                  value={annotationValue}
+                  onChange={(e) => setAnnotationValue(e.target.value)}
+                  autoFocus
+                  placeholder="説明を入力..."
+                  className="w-full bg-neutral-900 border border-neutral-600 rounded px-1.5 py-0.5 text-[11px] text-neutral-300 focus:outline-none focus:border-sky-500 mt-0.5"
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={() => {
+                    if (onSetAnnotation) {
+                      onSetAnnotation(line.text, annotationValue);
+                    }
+                    setIsEditingAnnotation(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (onSetAnnotation) {
+                        onSetAnnotation(line.text, annotationValue);
+                      }
+                      setIsEditingAnnotation(false);
+                    }
+                    if (e.key === "Escape") {
+                      setIsEditingAnnotation(false);
+                    }
+                    e.stopPropagation();
+                  }}
+                />
+              ) : annotation ? (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAnnotationValue(annotation);
+                    setIsEditingAnnotation(true);
+                  }}
+                  className="text-[11px] text-neutral-500 truncate block cursor-text hover:text-neutral-400 mt-0.5"
+                  title="Click to edit"
+                >
+                  {annotation}
+                </span>
+              ) : onSetAnnotation ? (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAnnotationValue("");
+                    setIsEditingAnnotation(true);
+                  }}
+                  className="text-[11px] text-neutral-700 hover:text-neutral-500 cursor-text mt-0.5 opacity-0 hover:opacity-100 transition-opacity"
+                >
+                  + 注釈
+                </span>
+              ) : null
+            )}
+          </div>
         )}
 
         {/* グループバッジ（クリックで変更可能） */}

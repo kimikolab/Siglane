@@ -26,6 +26,7 @@ import {
   createEntry,
   getEntriesByCategory,
 } from "@/utils/dictionary";
+import { getAnnotation } from "@/utils/annotations";
 
 interface PromptLineListProps {
   sectionLabel: string;
@@ -47,6 +48,8 @@ interface PromptLineListProps {
   onUngroup: (lineIds: string[]) => void;
   onSetLineGroup: (id: string, groupLabel: string | null) => void;
   onReplaceGroup: (groupId: string, groupLabel: string, newPrompts: string[]) => void;
+  annotations: Record<string, string>;
+  onSetAnnotation: (text: string, description: string) => void;
 }
 
 export default function PromptLineList({
@@ -69,6 +72,8 @@ export default function PromptLineList({
   onUngroup,
   onSetLineGroup,
   onReplaceGroup,
+  annotations,
+  onSetAnnotation,
 }: PromptLineListProps) {
   // --- 選択モード（セクション内部管理） ---
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -360,6 +365,8 @@ export default function PromptLineList({
                   onWeightSet={onWeightSet}
                   onSelect={handleSelect}
                   onSetLineGroup={onSetLineGroup}
+                  annotation={getAnnotation(annotations, line.text)}
+                  onSetAnnotation={onSetAnnotation}
                 />
               ))}
 
@@ -583,6 +590,8 @@ export default function PromptLineList({
                           onWeightSet={onWeightSet}
                           onSelect={handleSelect}
                           onSetLineGroup={onSetLineGroup}
+                          annotation={getAnnotation(annotations, line.text)}
+                          onSetAnnotation={onSetAnnotation}
                         />
                       ))}
                     </div>

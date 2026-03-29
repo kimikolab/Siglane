@@ -49,6 +49,10 @@ import {
   createDefaultSettings,
   testConnection,
 } from "@/utils/comfyApi";
+import {
+  loadAnnotations,
+  setAnnotation as updateAnnotation,
+} from "@/utils/annotations";
 
 const STORAGE_KEY = "siglane-app-state";
 const LEGACY_STORAGE_KEY = "siglane-state";
@@ -118,6 +122,12 @@ export default function Home() {
   const [headerRenameValue, setHeaderRenameValue] = useState("");
   const [weightMode, setWeightMode] = useState<WeightMode>("combined");
   const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
+
+  // --- プロンプト注釈 ---
+  const [annotations, setAnnotations] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setAnnotations(loadAnnotations());
+  }, []);
   const isInitial = useRef(true);
 
   // --- localStorage読み込み ---
@@ -661,6 +671,13 @@ export default function Home() {
       });
     },
     [updateActiveSession],
+  );
+
+  const handleSetAnnotation = useCallback(
+    (text: string, description: string) => {
+      setAnnotations((prev) => updateAnnotation(prev, text, description));
+    },
+    [],
   );
 
   const isTemplateActive = activeSession?.isTemplate ?? false;
@@ -1322,6 +1339,8 @@ export default function Home() {
                     onUngroup={handleUngroup}
                     onSetLineGroup={handleSetLineGroup}
                     onReplaceGroup={handleReplaceGroup}
+                    annotations={annotations}
+                    onSetAnnotation={handleSetAnnotation}
                   />
                 </div>
 
