@@ -88,6 +88,11 @@ export default function PromptLineList({
   const [savePresetName, setSavePresetName] = useState("");
   const [replacingGroupId, setReplacingGroupId] = useState<string | null>(null);
   const [presetToast, setPresetToast] = useState<string | null>(null);
+  // --- 選択行からのプリセット保存 ---
+  const [savingFromSelection, setSavingFromSelection] = useState(false);
+  const [selectionPresetName, setSelectionPresetName] = useState("");
+  const [selectionPresetCategory, setSelectionPresetCategory] = useState("");
+  const [showSelectionCategoryDropdown, setShowSelectionCategoryDropdown] = useState(false);
 
   const exitSelectMode = useCallback(() => {
     setIsSelectMode(false);
@@ -95,6 +100,10 @@ export default function PromptLineList({
     lastSelectedId.current = null;
     setShowGroupDropdown(false);
     setNewGroupName("");
+    setSavingFromSelection(false);
+    setSelectionPresetName("");
+    setSelectionPresetCategory("");
+    setShowSelectionCategoryDropdown(false);
   }, []);
 
   // --- Shiftキー追跡（イベントバブリングに依存しない） ---
@@ -293,6 +302,90 @@ export default function PromptLineList({
               </div>
             )}
           </div>
+          {/* Save selection as preset */}
+          {savingFromSelection ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={selectionPresetName}
+                onChange={(e) => setSelectionPresetName(e.target.value)}
+                placeholder="Preset name..."
+                autoFocus
+                className="w-24 bg-neutral-900 border border-neutral-600 rounded px-1.5 py-0.5 text-[11px] text-neutral-200 focus:outline-none focus:border-sky-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && selectionPresetName.trim() && selectionPresetCategory.trim()) {
+                    const prompts = lines.filter((l) => selectedIds.has(l.id)).map((l) => l.text);
+                    addEntry(createEntry(selectionPresetName.trim(), selectionPresetCategory.trim(), prompts));
+                    setPresetToast(`Saved "${selectionPresetName.trim()}" to dictionary`);
+                    setSavingFromSelection(false);
+                    setSelectionPresetName("");
+                    setSelectionPresetCategory("");
+                  }
+                  if (e.key === "Escape") {
+                    setSavingFromSelection(false);
+                    setSelectionPresetName("");
+                    setSelectionPresetCategory("");
+                  }
+                }}
+              />
+              <div className="relative">
+                <button
+                  onClick={() => setShowSelectionCategoryDropdown((p) => !p)}
+                  className="px-1.5 py-0.5 text-[11px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded truncate max-w-[100px]"
+                >
+                  {selectionPresetCategory || "Category ▼"}
+                </button>
+                {showSelectionCategoryDropdown && (
+                  <div
+                    className="absolute top-full right-0 mt-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[140px]"
+                    style={{ zIndex: 50 }}
+                  >
+                    {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => {
+                          setSelectionPresetCategory(cat);
+                          setShowSelectionCategoryDropdown(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700 transition-colors"
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setSavingFromSelection(false);
+                  setSelectionPresetName("");
+                  setSelectionPresetCategory("");
+                }}
+                className="px-1 py-0.5 text-[10px] text-neutral-500 hover:text-neutral-300"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                // 選択行が全て同じグループなら、そのグループ名をカテゴリ初期値にする
+                const selectedGroupIds = new Set(
+                  lines.filter((l) => selectedIds.has(l.id)).map((l) => l.groupId).filter(Boolean),
+                );
+                const label = selectedGroupIds.size === 1
+                  ? groups?.find((g) => g.id === Array.from(selectedGroupIds)[0])?.label ?? ""
+                  : "";
+                setSavingFromSelection(true);
+                setSelectionPresetCategory(label);
+              }}
+              disabled={selectedIds.size === 0}
+              className="px-1.5 py-0.5 text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors disabled:opacity-40"
+              title="Save selection as preset"
+            >
+              💾
+            </button>
+          )}
           <button
             onClick={() => {
               onBulkToggle(selectedArray, true);
