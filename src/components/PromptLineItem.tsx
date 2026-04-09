@@ -23,6 +23,7 @@ interface PromptLineItemProps {
   onSetLineGroup?: (id: string, groupLabel: string | null) => void;
   annotation?: string;
   onSetAnnotation?: (text: string, description: string) => void;
+  isDuplicate?: boolean;
 }
 
 export default function PromptLineItem({
@@ -41,6 +42,7 @@ export default function PromptLineItem({
   onSetLineGroup,
   annotation,
   onSetAnnotation,
+  isDuplicate = false,
 }: PromptLineItemProps) {
   const [isEditing, setIsEditing] = useState(line.text === "");
   const [isEditingWeight, setIsEditingWeight] = useState(false);
@@ -118,7 +120,9 @@ export default function PromptLineItem({
         className={`flex-1 flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800 rounded border transition-opacity focus:outline-none min-w-0 ${
           isSelectMode && isSelected
             ? "border-sky-500/60 bg-sky-900/20"
-            : "border-neutral-700/60"
+            : isDuplicate
+              ? "border-amber-500/60"
+              : "border-neutral-700/60"
         } ${line.enabled ? "opacity-100" : "opacity-40"} ${
           isSelectMode ? "cursor-pointer" : ""
         }`}

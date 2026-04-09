@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   DndContext,
   closestCenter,
@@ -26,7 +26,7 @@ import {
   createEntry,
   getEntriesByCategory,
 } from "@/utils/dictionary";
-import { getAnnotation } from "@/utils/annotations";
+import { getAnnotation, normalizeForLookup } from "@/utils/annotations";
 
 interface PromptLineListProps {
   sectionLabel: string;
@@ -78,6 +78,20 @@ export default function PromptLineList({
   onSetAnnotation,
 }: PromptLineListProps) {
   // --- 選択モード（セクション内部管理） ---
+  // --- 重複プロンプト検出 ---
+  const duplicateKeys = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const line of lines) {
+      const key = normalizeForLookup(line.text);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const dups = new Set<string>();
+    for (const [key, count] of counts) {
+      if (count > 1) dups.add(key);
+    }
+    return dups;
+  }, [lines]);
+
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const lastSelectedId = useRef<string | null>(null);
@@ -536,6 +550,7 @@ export default function PromptLineList({
                   onSetLineGroup={onSetLineGroup}
                   annotation={getAnnotation(annotations, line.text)}
                   onSetAnnotation={onSetAnnotation}
+                  isDuplicate={duplicateKeys.has(normalizeForLookup(line.text))}
                 />
               ))}
 
@@ -761,6 +776,7 @@ export default function PromptLineList({
                           onSetLineGroup={onSetLineGroup}
                           annotation={getAnnotation(annotations, line.text)}
                           onSetAnnotation={onSetAnnotation}
+                          isDuplicate={duplicateKeys.has(normalizeForLookup(line.text))}
                         />
                       ))}
                     </div>
