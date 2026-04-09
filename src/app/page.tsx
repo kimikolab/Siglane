@@ -63,6 +63,11 @@ import {
   recordDefaultGroup,
   removeDefaultGroup,
 } from "@/utils/defaultGroups";
+import {
+  type NegativeTags,
+  loadNegativeTags,
+  saveNegativeTags,
+} from "@/utils/negativeTags";
 
 const STORAGE_KEY = "siglane-app-state";
 const LEGACY_STORAGE_KEY = "siglane-state";
@@ -138,9 +143,11 @@ export default function Home() {
   const [showBulkAnnotation, setShowBulkAnnotation] = useState(false);
   const [bulkAnnotationText, setBulkAnnotationText] = useState("");
   const [defaultGroups, setDefaultGroups] = useState<DefaultGroups>({});
+  const [negativeTags, setNegativeTags] = useState<NegativeTags>({});
   useEffect(() => {
     setAnnotations(loadAnnotations());
     setDefaultGroups(loadDefaultGroups());
+    setNegativeTags(loadNegativeTags());
   }, []);
   const isInitial = useRef(true);
 
@@ -1399,8 +1406,14 @@ export default function Home() {
                         ].map((l) => l.text);
                         const unique = [...new Set(allTexts.map((t) => normalizeForLookup(t)))];
                         const unannotated = unique.filter((key) => !annotations[key]);
+                        const jsonEntries = unannotated.map((key) => ({
+                          tag: key,
+                          description: "",
+                          group: defaultGroups[key] ?? "",
+                          ...(negativeTags[key] ? { negative: true } : {}),
+                        }));
                         setBulkAnnotationText(
-                          unannotated.map((key) => `${key} = `).join("\n"),
+                          JSON.stringify(jsonEntries, null, 2),
                         );
                         setShowBulkAnnotation(true);
                       }}
@@ -1763,16 +1776,16 @@ export default function Home() {
               </div>
               <p className="text-xs text-neutral-400 mb-3">
                 Copy the list below, paste into an AI to get descriptions, then paste the result back and click Register.
-                Format: <code className="text-neutral-300">tag = description :Category</code>
+                Format: <code className="text-neutral-300">JSON array</code>
                 <br />
-                <span className="text-neutral-500">Category is optional. You can also use <code className="text-neutral-400">tag :Category</code> without description.</span>
+                <span className="text-neutral-500">Each entry: <code className="text-neutral-400">{`{"tag", "description", "group", "negative"}`}</code>. <code className="text-neutral-400">negative</code> is optional (default false).</span>
               </p>
               <textarea
                 value={bulkAnnotationText}
                 onChange={(e) => setBulkAnnotationText(e.target.value)}
                 rows={14}
                 className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-xs font-mono text-neutral-200 focus:outline-none focus:border-neutral-400 resize-y"
-                placeholder={"masterpiece = highest quality tag :Quality\n1girl = one female character :Character\nblue hair = blue colored hair :Hair\ncinematic lighting :Style"}
+                placeholder={'[\n  {"tag": "masterpiece", "description": "highest quality tag", "group": "Quality"},\n  {"tag": "1girl", "description": "one female character", "group": "Character"},\n  {"tag": "worst quality", "description": "low quality exclusion", "group": "Quality", "negative": true}\n]'}
               />
               <div className="flex items-center justify-between mt-3">
                 <button
@@ -1793,40 +1806,36 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => {
-                      const lines = bulkAnnotationText.split("\n");
-                      const parsed: {
-                        key: string;
-                        desc: string | null;
-                        category: string | null;
-                      }[] = [];
-                      for (const rawLine of lines) {
-                        const trimmed = rawLine.trim();
-                        if (!trimmed) continue;
-
-                        // :Category を末尾から抽出
-                        let category: string | null = null;
-                        let rest = trimmed;
-                        const catMatch = rest.match(/\s+:(\S+)$/);
-                        if (catMatch) {
-                          category = catMatch[1];
-                          rest = rest.slice(0, -catMatch[0].length).trim();
+                      let entries: Array<{
+                        tag: string;
+                        description?: string;
+                        group?: string;
+                        negative?: boolean;
+                      }>;
+                      try {
+                        entries = JSON.parse(bulkAnnotationText);
+                        if (!Array.isArray(entries)) {
+                          setGenerateToast({ message: "Invalid JSON: expected an array", type: "error" });
+                          return;
                         }
-
-                        // tag = description を分割
-                        const eqMatch = rest.match(/^(.+?)\s*[=→]\s*(.+)$/);
-                        if (eqMatch) {
-                          const key = eqMatch[1].trim().toLowerCase();
-                          const desc = eqMatch[2].trim();
-                          if (key) parsed.push({ key, desc, category });
-                        } else if (category) {
-                          // カテゴリのみ（例: "masterpiece :Quality"）
-                          const key = rest.trim().toLowerCase();
-                          if (key) parsed.push({ key, desc: null, category });
-                        }
+                      } catch {
+                        setGenerateToast({ message: "Invalid JSON format", type: "error" });
+                        return;
                       }
+
+                      // normalize keys
+                      const parsed = entries
+                        .filter((e) => e.tag && typeof e.tag === "string")
+                        .map((e) => ({
+                          key: e.tag.trim().toLowerCase(),
+                          desc: e.description?.trim() || null,
+                          group: e.group?.trim() || null,
+                          negative: e.negative === true,
+                        }));
 
                       let annotationCount = 0;
                       let groupCount = 0;
+                      let negativeCount = 0;
 
                       if (parsed.length > 0) {
                         // 注釈を登録
@@ -1844,9 +1853,9 @@ export default function Home() {
 
                         // デフォルトグループを登録
                         const newDefaults: Record<string, string> = {};
-                        for (const { key, category: cat } of parsed) {
-                          if (cat) {
-                            newDefaults[key] = cat;
+                        for (const { key, group } of parsed) {
+                          if (group) {
+                            newDefaults[key] = group;
                             groupCount++;
                           }
                         }
@@ -1898,15 +1907,33 @@ export default function Home() {
                             };
                           });
                         }
+
+                        // ネガティブタグを登録
+                        const newNegatives: NegativeTags = {};
+                        for (const { key, negative } of parsed) {
+                          if (negative) {
+                            newNegatives[key] = true;
+                            negativeCount++;
+                          }
+                        }
+                        if (negativeCount > 0) {
+                          setNegativeTags((prev) => {
+                            const updated = { ...prev, ...newNegatives };
+                            saveNegativeTags(updated);
+                            return updated;
+                          });
+                        }
                       }
 
                       setShowBulkAnnotation(false);
-                      if (annotationCount > 0 || groupCount > 0) {
+                      if (annotationCount > 0 || groupCount > 0 || negativeCount > 0) {
                         const parts: string[] = [];
                         if (annotationCount > 0)
                           parts.push(`${annotationCount} annotations`);
                         if (groupCount > 0)
                           parts.push(`${groupCount} default groups`);
+                        if (negativeCount > 0)
+                          parts.push(`${negativeCount} negative tags`);
                         setGenerateToast({
                           message: `Registered ${parts.join(" + ")}`,
                           type: "success",
