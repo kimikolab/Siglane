@@ -752,6 +752,48 @@ export default function Home() {
     [updateActiveSession],
   );
 
+  const handleReplaceSelection = useCallback(
+    (type: "positive" | "negative", selectedIds: string[], groupLabel: string, newPrompts: string[]) => {
+      const linesKey = type === "positive" ? "positiveLines" : "negativeLines";
+      const groupsKey = type === "positive" ? "positiveGroups" : "negativeGroups";
+      updateActiveSession((s) => {
+        const lines = [...(s[linesKey] as PromptLine[])];
+        const groups = [...(s[groupsKey] ?? [])];
+        const idSet = new Set(selectedIds);
+
+        // グループを検索、なければ作成
+        let group = groups.find((g) => g.label === groupLabel);
+        if (!group) {
+          group = { id: crypto.randomUUID(), label: groupLabel, order: groups.length };
+          groups.push(group);
+        }
+        const gid = group.id;
+
+        // 選択行をOFFにし、最後の選択行の位置を記録
+        let lastSelectedIndex = -1;
+        for (let i = 0; i < lines.length; i++) {
+          if (idSet.has(lines[i].id)) {
+            lines[i] = { ...lines[i], enabled: false };
+            lastSelectedIndex = i;
+          }
+        }
+
+        // 新しい行を作成（プリセットのカテゴリのgroupIdを付与）
+        const newLines = newPrompts.map((text) => ({
+          ...createPromptLine(text),
+          groupId: gid,
+        }));
+
+        // 最後の選択行の直後に挿入
+        const insertAt = lastSelectedIndex === -1 ? lines.length : lastSelectedIndex + 1;
+        lines.splice(insertAt, 0, ...newLines);
+
+        return { ...s, [linesKey]: lines, [groupsKey]: groups };
+      });
+    },
+    [updateActiveSession],
+  );
+
   const handleSetAnnotation = useCallback(
     (text: string, description: string) => {
       setAnnotations((prev) => updateAnnotation(prev, text, description));
@@ -1444,6 +1486,7 @@ export default function Home() {
                     onUngroup={handleUngroup}
                     onSetLineGroup={handleSetLineGroup}
                     onReplaceGroup={handleReplaceGroup}
+                    onReplaceSelection={handleReplaceSelection}
                     annotations={annotations}
                     onSetAnnotation={handleSetAnnotation}
                   />

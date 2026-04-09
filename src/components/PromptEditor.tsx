@@ -28,6 +28,7 @@ interface PromptEditorProps {
   onUngroup: (type: "positive" | "negative", lineIds: string[]) => void;
   onSetLineGroup: (type: "positive" | "negative", id: string, groupLabel: string | null) => void;
   onReplaceGroup: (type: "positive" | "negative", groupId: string, groupLabel: string, newPrompts: string[]) => void;
+  onReplaceSelection: (type: "positive" | "negative", selectedIds: string[], groupLabel: string, newPrompts: string[]) => void;
   annotations: Record<string, string>;
   onSetAnnotation: (text: string, description: string) => void;
 }
@@ -52,6 +53,7 @@ export default function PromptEditor({
   onUngroup,
   onSetLineGroup,
   onReplaceGroup,
+  onReplaceSelection,
   annotations,
   onSetAnnotation,
 }: PromptEditorProps) {
@@ -81,6 +83,7 @@ export default function PromptEditor({
         onUngroup={(ids) => onUngroup("positive", ids)}
         onSetLineGroup={(id, label) => onSetLineGroup("positive", id, label)}
         onReplaceGroup={(gid, label, prompts) => onReplaceGroup("positive", gid, label, prompts)}
+        onReplaceSelection={(ids, label, prompts) => onReplaceSelection("positive", ids, label, prompts)}
       />
 
       <div className="mt-4" />
@@ -109,6 +112,7 @@ export default function PromptEditor({
         onUngroup={(ids) => onUngroup("negative", ids)}
         onSetLineGroup={(id, label) => onSetLineGroup("negative", id, label)}
         onReplaceGroup={(gid, label, prompts) => onReplaceGroup("negative", gid, label, prompts)}
+        onReplaceSelection={(ids, label, prompts) => onReplaceSelection("negative", ids, label, prompts)}
       />
     </div>
   );

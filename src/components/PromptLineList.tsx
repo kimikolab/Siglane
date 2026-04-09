@@ -48,6 +48,7 @@ interface PromptLineListProps {
   onUngroup: (lineIds: string[]) => void;
   onSetLineGroup: (id: string, groupLabel: string | null) => void;
   onReplaceGroup: (groupId: string, groupLabel: string, newPrompts: string[]) => void;
+  onReplaceSelection: (selectedIds: string[], groupLabel: string, newPrompts: string[]) => void;
   annotations: Record<string, string>;
   onSetAnnotation: (text: string, description: string) => void;
 }
@@ -72,6 +73,7 @@ export default function PromptLineList({
   onUngroup,
   onSetLineGroup,
   onReplaceGroup,
+  onReplaceSelection,
   annotations,
   onSetAnnotation,
 }: PromptLineListProps) {
@@ -93,6 +95,8 @@ export default function PromptLineList({
   const [selectionPresetName, setSelectionPresetName] = useState("");
   const [selectionPresetCategory, setSelectionPresetCategory] = useState("");
   const [showSelectionCategoryDropdown, setShowSelectionCategoryDropdown] = useState(false);
+  // --- 選択行のプリセット差し替え ---
+  const [showSelectionReplaceDropdown, setShowSelectionReplaceDropdown] = useState(false);
 
   const exitSelectMode = useCallback(() => {
     setIsSelectMode(false);
@@ -104,6 +108,7 @@ export default function PromptLineList({
     setSelectionPresetName("");
     setSelectionPresetCategory("");
     setShowSelectionCategoryDropdown(false);
+    setShowSelectionReplaceDropdown(false);
   }, []);
 
   // --- Shiftキー追跡（イベントバブリングに依存しない） ---
@@ -386,6 +391,77 @@ export default function PromptLineList({
               💾
             </button>
           )}
+          {/* Replace selection with preset */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowSelectionReplaceDropdown((p) => !p);
+                setSavingFromSelection(false);
+              }}
+              disabled={selectedIds.size === 0}
+              className="px-1.5 py-0.5 text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors disabled:opacity-40"
+              title="Replace selection with preset"
+            >
+              🔄
+            </button>
+            {showSelectionReplaceDropdown && (
+              <div
+                className="absolute top-full right-0 mt-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[200px] max-h-[300px] overflow-y-auto"
+                style={{ zIndex: 50 }}
+              >
+                {(() => {
+                  const allCategories = DEFAULT_GROUP_CATEGORIES;
+                  // 選択行のグループを優先表示
+                  const selectedGroupIds = new Set(
+                    lines.filter((l) => selectedIds.has(l.id)).map((l) => l.groupId).filter(Boolean),
+                  );
+                  const priorityLabel = selectedGroupIds.size === 1
+                    ? groups?.find((g) => g.id === Array.from(selectedGroupIds)[0])?.label
+                    : undefined;
+                  const categoriesToShow = priorityLabel
+                    ? [priorityLabel, ...allCategories.filter((c) => c !== priorityLabel)]
+                    : allCategories;
+
+                  let hasAny = false;
+                  return (
+                    <>
+                      {categoriesToShow.map((cat) => {
+                        const presets = getEntriesByCategory(cat);
+                        if (presets.length === 0) return null;
+                        hasAny = true;
+                        return (
+                          <div key={cat}>
+                            <p className="px-3 py-1 text-[10px] text-neutral-500 font-medium border-b border-neutral-700">
+                              {cat}
+                            </p>
+                            {presets.map((preset) => (
+                              <button
+                                key={preset.id}
+                                onClick={() => {
+                                  onReplaceSelection(selectedArray, cat, preset.prompts);
+                                  setShowSelectionReplaceDropdown(false);
+                                  setSelectedIds(new Set());
+                                  setPresetToast(`Replaced with "${preset.label}"`);
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700 transition-colors"
+                                title={preset.prompts.join(", ")}
+                              >
+                                <span className="font-medium">{preset.label}</span>
+                                <span className="text-neutral-500 ml-1.5">({preset.prompts.length})</span>
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })}
+                      {!hasAny && (
+                        <p className="px-3 py-2 text-xs text-neutral-500">No presets available</p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => {
               onBulkToggle(selectedArray, true);
