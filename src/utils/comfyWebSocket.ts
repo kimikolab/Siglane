@@ -15,12 +15,21 @@ export async function fetchHistoryImages(
 ): Promise<string[]> {
   const baseUrl = connection.url.replace(/\/+$/, "");
   try {
-    const resp = await fetch(`${baseUrl}/history/${promptId}`);
-    if (!resp.ok) return [];
+    const historyUrl = `${baseUrl}/history/${promptId}`;
+    console.log("[Siglane WS] Fetching history:", historyUrl);
+    const resp = await fetch(historyUrl);
+    if (!resp.ok) {
+      console.error("[Siglane WS] History fetch failed:", resp.status);
+      return [];
+    }
     const data = await resp.json();
+    console.log("[Siglane WS] History data keys:", Object.keys(data));
 
     const entry = data[promptId];
-    if (!entry?.outputs) return [];
+    if (!entry?.outputs) {
+      console.warn("[Siglane WS] No outputs in history entry");
+      return [];
+    }
 
     const urls: string[] = [];
     for (const nodeOutput of Object.values(entry.outputs) as Array<Record<string, unknown>>) {
@@ -38,7 +47,8 @@ export async function fetchHistoryImages(
       }
     }
     return urls;
-  } catch {
+  } catch (err) {
+    console.error("[Siglane WS] History fetch error:", err);
     return [];
   }
 }
@@ -60,10 +70,15 @@ export function watchExecution(
 
   try {
     ws = new WebSocket(wsUrl);
+    console.log("[Siglane WS] Connecting to", wsUrl, "for prompt", promptId);
   } catch (err) {
     onError?.(`WebSocket connection failed: ${err}`);
     return () => {};
   }
+
+  ws.onopen = () => {
+    console.log("[Siglane WS] Connected");
+  };
 
   ws.onmessage = async (event) => {
     // バイナリメッセージ（プレビュー画像等）はスキップ
@@ -71,6 +86,7 @@ export function watchExecution(
 
     try {
       const msg = JSON.parse(event.data);
+      console.log("[Siglane WS] Message:", msg.type, msg.data);
 
       // ComfyUIの完了シグナル:
       // { type: "executing", data: { node: null, prompt_id: "..." } }
@@ -80,10 +96,12 @@ export function watchExecution(
         msg.data?.prompt_id === promptId &&
         msg.data?.node === null
       ) {
+        console.log("[Siglane WS] Execution complete, fetching history...");
         // historyに書き込まれるまで少し待つ
         setTimeout(async () => {
           if (closed) return;
           const imageUrls = await fetchHistoryImages(connection, promptId);
+          console.log("[Siglane WS] History images:", imageUrls);
           onComplete({ promptId, imageUrls });
           ws?.close();
           closed = true;
@@ -94,10 +112,15 @@ export function watchExecution(
     }
   };
 
-  ws.onerror = () => {
+  ws.onerror = (evt) => {
+    console.error("[Siglane WS] Error:", evt);
     if (!closed) {
       onError?.("WebSocket connection error");
     }
+  };
+
+  ws.onclose = (evt) => {
+    console.log("[Siglane WS] Closed:", evt.code, evt.reason);
   };
 
   // 120秒タイムアウト（重い生成に対応）
