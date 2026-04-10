@@ -584,7 +584,7 @@ function DictionaryRow({
       )}
 
       {/* タグ名 */}
-      <span className="text-sm font-mono text-neutral-100 flex-shrink-0 min-w-[120px] max-w-[200px] truncate" title={entry.key}>
+      <span className="text-sm font-mono text-neutral-100 flex-shrink-0" title={entry.key}>
         {entry.key}
       </span>
 
