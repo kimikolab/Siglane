@@ -66,23 +66,31 @@ export function watchExecution(
   }
 
   ws.onmessage = async (event) => {
+    // バイナリメッセージ（プレビュー画像等）はスキップ
+    if (typeof event.data !== "string") return;
+
     try {
       const msg = JSON.parse(event.data);
-      // ComfyUIは { type: "executed", data: { prompt_id, node, output } } を送る
-      if (msg.type === "executed" && msg.data?.prompt_id === promptId) {
-        // 最終ノード実行後にhistory APIから全画像を取得
-        // 少し待ってからfetchする（ComfyUIがhistoryに書き込むまでの猶予）
+
+      // ComfyUIの完了シグナル:
+      // { type: "executing", data: { node: null, prompt_id: "..." } }
+      // node が null = 全ノード実行完了
+      if (
+        msg.type === "executing" &&
+        msg.data?.prompt_id === promptId &&
+        msg.data?.node === null
+      ) {
+        // historyに書き込まれるまで少し待つ
         setTimeout(async () => {
           if (closed) return;
           const imageUrls = await fetchHistoryImages(connection, promptId);
           onComplete({ promptId, imageUrls });
-          // 完了したら切断
           ws?.close();
           closed = true;
-        }, 500);
+        }, 1000);
       }
     } catch {
-      // JSONパース失敗は無視（バイナリプレビューデータなど）
+      // JSONパース失敗は無視
     }
   };
 
@@ -92,14 +100,14 @@ export function watchExecution(
     }
   };
 
-  // 30秒タイムアウト
+  // 120秒タイムアウト（重い生成に対応）
   const timeout = setTimeout(() => {
     if (!closed) {
       closed = true;
       ws?.close();
-      onError?.("Generation timed out (30s)");
+      onError?.("Generation timed out (120s)");
     }
-  }, 30000);
+  }, 120000);
 
   // クリーンアップ関数
   return () => {
