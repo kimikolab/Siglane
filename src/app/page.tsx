@@ -27,6 +27,7 @@ import InputArea from "@/components/InputArea";
 import PromptEditor from "@/components/PromptEditor";
 import MemoBox from "@/components/MemoBox";
 import GenerationHistory from "@/components/GenerationHistory";
+import DictionaryView from "@/components/DictionaryView";
 import SessionSidebar from "@/components/SessionSidebar";
 import { WeightMode } from "@/components/PromptLineItem";
 import {
@@ -156,6 +157,7 @@ export default function Home() {
   const [headerRenameValue, setHeaderRenameValue] = useState("");
   const [weightMode, setWeightMode] = useState<WeightMode>("combined");
   const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
+  const [isDictionaryView, setIsDictionaryView] = useState(false);
 
   // --- プロンプト注釈 ---
   const [annotations, setAnnotations] = useState<Record<string, string>>({});
@@ -247,6 +249,7 @@ export default function Home() {
 
   const handleSelectSession = (id: string) => {
     setAppState((prev) => ({ ...prev, activeSessionId: id }));
+    setIsDictionaryView(false);
   };
 
   const handleDuplicateSession = (id: string) => {
@@ -865,6 +868,51 @@ export default function Home() {
     [],
   );
 
+  // --- 辞書管理画面用ハンドラ（normalizedキーで直接操作） ---
+  const handleDictUpdateAnnotation = useCallback(
+    (key: string, description: string) => {
+      setAnnotations((prev) => {
+        const updated = { ...prev };
+        if (description.trim()) {
+          updated[key] = description.trim();
+        } else {
+          delete updated[key];
+        }
+        saveAnnotations(updated);
+        return updated;
+      });
+    },
+    [],
+  );
+
+  const handleDictDeleteAnnotation = useCallback(
+    (key: string) => {
+      setAnnotations((prev) => {
+        const updated = { ...prev };
+        delete updated[key];
+        saveAnnotations(updated);
+        return updated;
+      });
+    },
+    [],
+  );
+
+  const handleDictUpdateGroup = useCallback(
+    (key: string, group: string | null) => {
+      setDefaultGroups((prev) => {
+        const updated = { ...prev };
+        if (group) {
+          updated[key] = group;
+        } else {
+          delete updated[key];
+        }
+        saveDefaultGroups(updated);
+        return updated;
+      });
+    },
+    [],
+  );
+
   const isTemplateActive = activeSession?.isTemplate ?? false;
 
   // --- ComfyUI API連携 ---
@@ -1163,11 +1211,23 @@ export default function Home() {
         onNewFolder={handleNewFolder}
         onRenameFolder={handleRenameFolder}
         onDeleteFolder={handleDeleteFolder}
+        isDictionaryActive={isDictionaryView}
+        onOpenDictionary={() => setIsDictionaryView(true)}
       />
 
       {/* メインエディタ */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-6">
+          {isDictionaryView ? (
+            <DictionaryView
+              annotations={annotations}
+              defaultGroups={defaultGroups}
+              onUpdateAnnotation={handleDictUpdateAnnotation}
+              onDeleteAnnotation={handleDictDeleteAnnotation}
+              onUpdateGroup={handleDictUpdateGroup}
+            />
+          ) : (
+          <>
           {/* ステータスバー */}
           <div className="flex items-start justify-between mb-5">
             {/* 左: セッション名 + テンプレートバッジ */}
@@ -1728,6 +1788,8 @@ export default function Home() {
                 </div>
               )}
             </>
+          )}
+          </>
           )}
         </div>
       </div>

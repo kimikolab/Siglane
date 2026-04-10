@@ -9,6 +9,7 @@ interface SessionSidebarProps {
   folders: Folder[];
   activeSessionId: string;
   collapsed: boolean;
+  isDictionaryActive?: boolean;
   onToggleCollapse: () => void;
   onSelectSession: (id: string) => void;
   onNewSession: (folderId?: string | null) => void;
@@ -21,6 +22,7 @@ interface SessionSidebarProps {
   onNewFolder: (parentId: string | null) => void;
   onRenameFolder: (id: string, newLabel: string) => void;
   onDeleteFolder: (id: string) => void;
+  onOpenDictionary?: () => void;
 }
 
 // --- コンテキストメニュー（Portal描画） ---
@@ -171,6 +173,8 @@ export default function SessionSidebar({
   onNewFolder,
   onRenameFolder,
   onDeleteFolder,
+  isDictionaryActive,
+  onOpenDictionary,
 }: SessionSidebarProps) {
   const [menuOpen, setMenuOpen] = useState<{
     type: "session" | "folder";
@@ -650,6 +654,18 @@ export default function SessionSidebar({
             />
           </svg>
         </button>
+        {onOpenDictionary && (
+          <button
+            onClick={onOpenDictionary}
+            className={`p-1.5 transition-colors ${isDictionaryActive ? "text-neutral-200" : "text-neutral-400 hover:text-neutral-200"}`}
+            title="Dictionary"
+          >
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2">
+              <path d="M2 2h4l2 2h6v10H2z" />
+              <path d="M5 8h6M5 11h4" />
+            </svg>
+          </button>
+        )}
       </div>
     );
   }
@@ -724,6 +740,27 @@ export default function SessionSidebar({
 
         {/* リスト */}
         <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-0.5 sidebar-scroll">
+          {/* 辞書管理 */}
+          {onOpenDictionary && (
+            <>
+              <div
+                onClick={onOpenDictionary}
+                className={`flex items-center gap-2 rounded-lg cursor-pointer transition-colors px-4 py-2.5 ${
+                  isDictionaryActive
+                    ? "bg-neutral-700/60 border border-neutral-600/60"
+                    : "hover:bg-neutral-800/80 border border-transparent"
+                }`}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="flex-shrink-0 text-neutral-400">
+                  <path d="M2 2h4l2 2h6v10H2z" />
+                  <path d="M5 8h6M5 11h4" />
+                </svg>
+                <span className="text-sm text-neutral-200">Dictionary</span>
+              </div>
+              <div className="my-2 h-px bg-neutral-800 mx-2" />
+            </>
+          )}
+
           {/* テンプレート */}
           {templates.length > 0 && (
             <>
