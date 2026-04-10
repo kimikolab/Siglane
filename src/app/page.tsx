@@ -36,6 +36,10 @@ import {
   formatGenerationParams,
 } from "@/utils/comfyWorkflow";
 import {
+  extractComfyPngMetadata,
+  generateThumbnail,
+} from "@/utils/pngMetadata";
+import {
   type ComfySettings,
   type ComfyApiWorkflow,
   isApiFormat,
@@ -364,6 +368,7 @@ export default function Home() {
 
   // --- ComfyUI連携 ---
   const comfyFileRef = useRef<HTMLInputElement>(null);
+  const pngFileRef = useRef<HTMLInputElement>(null);
 
   const handleImportComfyWorkflow = (file: File) => {
     const reader = new FileReader();
@@ -399,6 +404,49 @@ export default function Home() {
       }
     };
     reader.readAsText(file);
+  };
+
+  // ComfyUI生成PNGを読み込む: メタデータ抽出 + サムネイル生成
+  const handleImportComfyPng = async (file: File) => {
+    try {
+      const [metadata, thumbnail] = await Promise.all([
+        extractComfyPngMetadata(file),
+        generateThumbnail(file, 256),
+      ]);
+
+      // workflowがあればUI形式として取り込む
+      const workflow = metadata.workflow;
+      if (workflow) {
+        const result = parseComfyWorkflow(workflow);
+        if (!isParseError(result)) {
+          updateActiveSession((s) => {
+            const posParsed = parsePrompt(result.positivePrompt);
+            const negParsed = parsePrompt(result.negativePrompt);
+            const pos = applyDefaultGroupsToLines(posParsed, s.positiveGroups);
+            const neg = applyDefaultGroupsToLines(negParsed, s.negativeGroups);
+            return {
+              ...s,
+              positiveLines: pos.lines,
+              positiveGroups: pos.groups,
+              negativeLines: neg.lines,
+              negativeGroups: neg.groups,
+              memo: formatGenerationParams(result.generationParams),
+              comfyWorkflow: workflow,
+              comfyPositiveNodeId: result.positiveNodeId,
+              comfyNegativeNodeId: result.negativeNodeId,
+              thumbnailDataUrl: thumbnail,
+            };
+          });
+          return;
+        }
+      }
+
+      // workflowなし or パース失敗: サムネイルだけ保存
+      updateActiveSession((s) => ({ ...s, thumbnailDataUrl: thumbnail }));
+    } catch (err) {
+      console.error("PNG import failed:", err);
+      alert("Failed to read PNG metadata");
+    }
   };
 
   const handleExportComfyWorkflow = () => {
@@ -1165,11 +1213,28 @@ export default function Home() {
                           e.target.value = "";
                         }}
                       />
+                      <input
+                        ref={pngFileRef}
+                        type="file"
+                        accept="image/png"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleImportComfyPng(file);
+                          e.target.value = "";
+                        }}
+                      />
                       <button
                         onClick={() => comfyFileRef.current?.click()}
                         className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
                       >
                         Import workflow
+                      </button>
+                      <button
+                        onClick={() => pngFileRef.current?.click()}
+                        className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
+                      >
+                        Import PNG
                       </button>
                       {activeSession?.comfyWorkflow != null && (
                         <button
@@ -1179,6 +1244,27 @@ export default function Home() {
                           Export for ComfyUI
                         </button>
                       )}
+                    </div>
+                  )}
+                  {/* PNG サムネイル */}
+                  {activeSession?.thumbnailDataUrl && (
+                    <div className="flex items-center gap-2 mt-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={activeSession.thumbnailDataUrl}
+                        alt="Generated image thumbnail"
+                        className="h-16 w-auto rounded border border-neutral-700 object-cover cursor-pointer hover:border-neutral-500 transition-colors"
+                        title="Click to remove thumbnail"
+                        onClick={() =>
+                          updateActiveSession((s) => ({
+                            ...s,
+                            thumbnailDataUrl: undefined,
+                          }))
+                        }
+                      />
+                      <span className="text-[10px] text-neutral-600">
+                        Click to remove
+                      </span>
                     </div>
                   )}
                 </div>

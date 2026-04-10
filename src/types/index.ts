@@ -64,6 +64,8 @@ export interface Session {
   comfyOverrides?: ComfyGenerationOverrides;
   // 生成履歴
   generationHistory?: GenerationHistoryEntry[];
+  // PNG取込画像のサムネイル（base64 dataURL、デフォルト256px JPEG）
+  thumbnailDataUrl?: string;
 }
 
 // 生成履歴エントリ

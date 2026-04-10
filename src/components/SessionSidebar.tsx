@@ -327,7 +327,25 @@ export default function SessionSidebar({
         onClick={() => !isRenaming && handleSessionClick(session)}
       >
         <div className="flex items-center gap-2 min-w-0">
-          {session.isTemplate && (
+          {/* サムネイル or テンプレートアイコン */}
+          {session.thumbnailDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={session.thumbnailDataUrl}
+              alt=""
+              className="flex-shrink-0 w-8 h-8 rounded object-cover border border-neutral-700"
+            />
+          ) : (
+            session.isTemplate && (
+              <span className="flex-shrink-0 text-amber-500" title="Template">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 1l1.5 4.5H14l-3.5 2.5L12 13 8 10l-4 3 1.5-5L2 5.5h4.5z" />
+                </svg>
+              </span>
+            )
+          )}
+          {/* サムネあり + テンプレートの場合もアイコン表示 */}
+          {session.thumbnailDataUrl && session.isTemplate && (
             <span className="flex-shrink-0 text-amber-500" title="Template">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1l1.5 4.5H14l-3.5 2.5L12 13 8 10l-4 3 1.5-5L2 5.5h4.5z" />
