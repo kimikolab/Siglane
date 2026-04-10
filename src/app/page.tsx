@@ -1573,6 +1573,12 @@ export default function Home() {
                 <GenerationHistory
                   entries={activeSession.generationHistory ?? []}
                   comfyConnected={!!getActiveConnection(comfySettings)}
+                  onClear={() => {
+                    updateActiveSession((s) => ({
+                      ...s,
+                      generationHistory: [],
+                    }));
+                  }}
                 />
               </div>
 

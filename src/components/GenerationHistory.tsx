@@ -6,11 +6,13 @@ import type { GenerationHistoryEntry } from "@/types";
 interface GenerationHistoryProps {
   entries: GenerationHistoryEntry[];
   comfyConnected: boolean;
+  onClear?: () => void;
 }
 
 export default function GenerationHistory({
   entries,
   comfyConnected,
+  onClear,
 }: GenerationHistoryProps) {
   const [expanded, setExpanded] = useState(true);
 
@@ -32,6 +34,18 @@ export default function GenerationHistory({
           ({entries.length})
         </span>
       </button>
+      {expanded && onClear && (
+        <button
+          onClick={() => {
+            if (window.confirm("Clear all generation history for this session?")) {
+              onClear();
+            }
+          }}
+          className="text-[10px] text-neutral-600 hover:text-red-400 transition-colors mb-2 ml-5"
+        >
+          Clear history
+        </button>
+      )}
 
       {expanded && (
         <div className="space-y-2">
@@ -114,7 +128,7 @@ function HistoryEntry({
               <img
                 src={url}
                 alt={`gen-${i}`}
-                className="h-24 w-auto rounded border border-neutral-700 hover:border-neutral-500 transition-colors object-cover"
+                className="h-40 w-auto rounded border border-neutral-700 hover:border-neutral-500 transition-colors object-cover"
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
