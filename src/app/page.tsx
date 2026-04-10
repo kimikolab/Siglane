@@ -10,6 +10,7 @@ import {
   PromptLine,
   PromptGroup,
   ComfyGenerationOverrides,
+  GenerationHistoryEntry,
   parsePrompt,
   joinPromptLines,
   joinAllPromptLines,
@@ -25,6 +26,7 @@ import {
 import InputArea from "@/components/InputArea";
 import PromptEditor from "@/components/PromptEditor";
 import MemoBox from "@/components/MemoBox";
+import GenerationHistory from "@/components/GenerationHistory";
 import SessionSidebar from "@/components/SessionSidebar";
 import { WeightMode } from "@/components/PromptLineItem";
 import {
@@ -56,6 +58,10 @@ import {
   setAnnotation as updateAnnotation,
   normalizeForLookup,
 } from "@/utils/annotations";
+import {
+  watchExecution,
+  type ComfyExecutionResult,
+} from "@/utils/comfyWebSocket";
 import {
   type DefaultGroups,
   loadDefaultGroups,
@@ -812,11 +818,19 @@ export default function Home() {
     type: "success" | "error";
   } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const wsCleanupRef = useRef<(() => void) | null>(null);
   const apiWorkflowFileRef = useRef<HTMLInputElement>(null);
 
   // ComfyUI設定をlocalStorageから読み込み
   useEffect(() => {
     setComfySettings(loadComfySettings());
+  }, []);
+
+  // WebSocketクリーンアップ（アンマウント時）
+  useEffect(() => {
+    return () => {
+      wsCleanupRef.current?.();
+    };
   }, []);
 
   // トースト自動消去
@@ -925,6 +939,65 @@ export default function Home() {
 
     if (result.success) {
       setGenerateToast({ message: "Queued!", type: "success" });
+
+      // WebSocketで生成完了を監視
+      if (result.promptId && conn) {
+        wsCleanupRef.current?.();
+
+        const snapshotOverrides = { ...overrides };
+        const snapshotSessionId = appState.activeSessionId;
+        // applyOverridesでランダム化されたseedを取得
+        if (snapshotOverrides.seed === "random") {
+          for (const node of Object.values(finalWorkflow)) {
+            if (typeof node.inputs?.seed === "number") {
+              snapshotOverrides.seed = node.inputs.seed as number;
+              break;
+            }
+          }
+        }
+
+        wsCleanupRef.current = watchExecution(
+          conn,
+          result.promptId,
+          (execResult: ComfyExecutionResult) => {
+            const historyEntry: GenerationHistoryEntry = {
+              id: crypto.randomUUID(),
+              promptId: execResult.promptId,
+              positivePrompt: positiveText,
+              negativePrompt: negativeText,
+              overrides: snapshotOverrides,
+              imageUrls: execResult.imageUrls,
+              createdAt: new Date().toISOString(),
+            };
+
+            setAppState((prev) => ({
+              ...prev,
+              sessions: prev.sessions.map((s) =>
+                s.id === snapshotSessionId
+                  ? {
+                      ...s,
+                      generationHistory: [
+                        ...(s.generationHistory ?? []),
+                        historyEntry,
+                      ],
+                      updatedAt: new Date().toISOString(),
+                    }
+                  : s
+              ),
+            }));
+
+            setGenerateToast({
+              message: `Done! ${execResult.imageUrls.length} image(s)`,
+              type: "success",
+            });
+            wsCleanupRef.current = null;
+          },
+          (error: string) => {
+            setGenerateToast({ message: error, type: "error" });
+            wsCleanupRef.current = null;
+          },
+        );
+      }
     } else {
       setGenerateToast({
         message: result.error ?? "Failed to queue prompt",
@@ -1495,6 +1568,11 @@ export default function Home() {
                 <MemoBox
                   memo={activeSession.memo}
                   onMemoChange={handleMemoChange}
+                />
+
+                <GenerationHistory
+                  entries={activeSession.generationHistory ?? []}
+                  comfyConnected={!!getActiveConnection(comfySettings)}
                 />
               </div>
 

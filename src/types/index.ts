@@ -62,6 +62,19 @@ export interface Session {
   comfyApiNegativeNodeId?: string;
   // 生成パラメータオーバーライド（UIから編集可能）
   comfyOverrides?: ComfyGenerationOverrides;
+  // 生成履歴
+  generationHistory?: GenerationHistoryEntry[];
+}
+
+// 生成履歴エントリ
+export interface GenerationHistoryEntry {
+  id: string;
+  promptId: string;
+  positivePrompt: string;
+  negativePrompt: string;
+  overrides: ComfyGenerationOverrides;
+  imageUrls: string[];       // ComfyUI /view?filename=... URLs
+  createdAt: string;
 }
 
 // Siglane上で編集可能な生成パラメータ
