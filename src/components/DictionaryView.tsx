@@ -124,9 +124,9 @@ export default function DictionaryView({
   }, [selectedKeys, annotations, defaultGroups, onOpenBulkNotes]);
 
   return (
-    <div>
+    <div className="flex flex-col flex-1 min-h-0">
       {/* ヘッダー */}
-      <div className="flex items-start justify-between mb-5">
+      <div className="flex items-start justify-between mb-5 flex-shrink-0">
         <div>
           <h1 className="text-base font-medium text-neutral-100">Dictionary</h1>
           <p className="text-xs text-neutral-500 mt-1">
@@ -136,7 +136,7 @@ export default function DictionaryView({
       </div>
 
       {/* 検索 + ビュー切り替え */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-shrink-0">
         <div className="flex-1 relative">
           <input
             type="text"
@@ -223,7 +223,7 @@ export default function DictionaryView({
 
       {/* Select mode action bar */}
       {isSelectMode && (
-        <div className="flex items-center gap-2 flex-wrap mb-3 bg-neutral-800/80 rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 flex-wrap mb-3 bg-neutral-800/80 rounded-lg px-3 py-2 flex-shrink-0">
           <span className="text-xs text-neutral-300">
             {selectedKeys.size} selected
           </span>
@@ -337,6 +337,8 @@ export default function DictionaryView({
         </div>
       )}
 
+      {/* スクロール可能なリスト領域 */}
+      <div className="flex-1 overflow-y-auto sidebar-scroll pb-4">
       {/* フラットビュー */}
       {viewMode === "flat" && (
         <div className="flex flex-col gap-0.5">
@@ -515,6 +517,7 @@ export default function DictionaryView({
           })()}
         </div>
       )}
+      </div>
     </div>
   );
 }
