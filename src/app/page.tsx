@@ -63,6 +63,14 @@ import {
   type ComfyExecutionResult,
 } from "@/utils/comfyWebSocket";
 import {
+  type LlmSettings,
+  loadLlmSettings,
+  saveLlmSettings,
+  testLlmConnection,
+  translateTags,
+  createDefaultLlmSettings,
+} from "@/utils/llmApi";
+import {
   type DefaultGroups,
   loadDefaultGroups,
   saveDefaultGroups,
@@ -602,6 +610,7 @@ export default function Home() {
         setIsRenamingHeader(false);
         setShowApiWorkflowModal(false);
         setShowComfySettingsModal(false);
+        setShowLlmSettingsModal(false);
       }
     };
     window.addEventListener("keydown", handleGlobalKey);
@@ -824,6 +833,15 @@ export default function Home() {
   // ComfyUI設定をlocalStorageから読み込み
   useEffect(() => {
     setComfySettings(loadComfySettings());
+  }, []);
+
+  // --- LLM連携 ---
+  const [llmSettings, setLlmSettings] = useState<LlmSettings>(createDefaultLlmSettings);
+  const [showLlmSettingsModal, setShowLlmSettingsModal] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+
+  useEffect(() => {
+    setLlmSettings(loadLlmSettings());
   }, []);
 
   // WebSocketクリーンアップ（アンマウント時）
@@ -1907,6 +1925,52 @@ export default function Home() {
                 <br />
                 <span className="text-neutral-500">Each entry: <code className="text-neutral-400">{`{"tag", "description", "group", "negative"}`}</code>. <code className="text-neutral-400">negative</code> is optional (default false).</span>
               </p>
+              {/* LLM Auto-fill */}
+              <div className="flex items-center gap-2 mb-3">
+                <button
+                  onClick={async () => {
+                    setIsTranslating(true);
+                    const result = await translateTags(llmSettings, bulkAnnotationText);
+                    setIsTranslating(false);
+                    if (result.ok) {
+                      setBulkAnnotationText(result.result);
+                      setGenerateToast({ message: "LLM auto-fill complete", type: "success" });
+                    } else {
+                      setGenerateToast({ message: result.error, type: "error" });
+                    }
+                  }}
+                  disabled={isTranslating || !bulkAnnotationText.trim()}
+                  className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                    isTranslating
+                      ? "bg-neutral-700 text-neutral-500 cursor-wait"
+                      : "bg-sky-600 hover:bg-sky-500 text-white"
+                  } disabled:opacity-40`}
+                >
+                  {isTranslating ? "Translating..." : "Auto-fill with LLM"}
+                </button>
+                <button
+                  onClick={() => setShowLlmSettingsModal(true)}
+                  className="text-neutral-600 hover:text-neutral-400 transition-colors p-1"
+                  title="LLM connection settings"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </button>
+                <span className="text-[10px] text-neutral-600">
+                  {llmSettings.connection.model} @ {llmSettings.connection.url.replace(/https?:\/\//, "").replace(/\/v1\/chat\/completions\/?$/, "")}
+                </span>
+              </div>
               <textarea
                 value={bulkAnnotationText}
                 onChange={(e) => setBulkAnnotationText(e.target.value)}
@@ -2070,6 +2134,164 @@ export default function Home() {
                     className="px-3 py-1.5 text-xs bg-sky-600 hover:bg-sky-500 text-white rounded transition-colors"
                   >
                     Register
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* LLM接続設定モーダル */}
+      {showLlmSettingsModal &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 10001,
+            }}
+            onClick={() => setShowLlmSettingsModal(false)}
+          >
+            <div
+              style={{
+                backgroundColor: "#262626",
+                border: "1px solid #404040",
+                borderRadius: "8px",
+                padding: "24px",
+                maxWidth: "480px",
+                width: "100%",
+                margin: "0 16px",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-medium text-neutral-200">
+                  LLM Connection
+                </h2>
+                <button
+                  onClick={() => setShowLlmSettingsModal(false)}
+                  className="text-neutral-500 hover:text-neutral-300 transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1">
+                    API URL
+                  </label>
+                  <input
+                    type="text"
+                    defaultValue={llmSettings.connection.url}
+                    onBlur={(e) => {
+                      const updated = {
+                        ...llmSettings,
+                        connection: { ...llmSettings.connection, url: e.target.value.trim() },
+                      };
+                      setLlmSettings(updated);
+                      saveLlmSettings(updated);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
+                    className="w-full bg-neutral-800 border border-neutral-600 rounded px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-neutral-400 font-mono"
+                    placeholder="http://localhost:11434/v1/chat/completions"
+                  />
+                  <p className="text-[10px] text-neutral-600 mt-1">
+                    Ollama: localhost:11434 / LM Studio: localhost:1234 / OpenAI: api.openai.com
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs text-neutral-400 mb-1">
+                      Model
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue={llmSettings.connection.model}
+                      onBlur={(e) => {
+                        const updated = {
+                          ...llmSettings,
+                          connection: { ...llmSettings.connection, model: e.target.value.trim() },
+                        };
+                        setLlmSettings(updated);
+                        saveLlmSettings(updated);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
+                      className="w-full bg-neutral-800 border border-neutral-600 rounded px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-neutral-400 font-mono"
+                      placeholder="gemma2"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs text-neutral-400 mb-1">
+                      API Key <span className="text-neutral-600">(optional)</span>
+                    </label>
+                    <input
+                      type="password"
+                      defaultValue={llmSettings.connection.apiKey}
+                      onBlur={(e) => {
+                        const updated = {
+                          ...llmSettings,
+                          connection: { ...llmSettings.connection, apiKey: e.target.value.trim() },
+                        };
+                        setLlmSettings(updated);
+                        saveLlmSettings(updated);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
+                      className="w-full bg-neutral-800 border border-neutral-600 rounded px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-neutral-400 font-mono"
+                      placeholder="sk-... (blank for local)"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1">
+                    System prompt
+                  </label>
+                  <textarea
+                    defaultValue={llmSettings.systemPrompt}
+                    onBlur={(e) => {
+                      const updated = {
+                        ...llmSettings,
+                        systemPrompt: e.target.value,
+                      };
+                      setLlmSettings(updated);
+                      saveLlmSettings(updated);
+                    }}
+                    rows={6}
+                    className="w-full bg-neutral-800 border border-neutral-600 rounded px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-neutral-400 font-mono resize-y"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={async () => {
+                      const result = await testLlmConnection(llmSettings.connection);
+                      setGenerateToast(
+                        result.ok
+                          ? { message: "Connected to LLM!", type: "success" }
+                          : { message: `Connection failed: ${result.error}`, type: "error" },
+                      );
+                    }}
+                    className="text-xs text-sky-500 hover:text-sky-400 transition-colors"
+                  >
+                    Test connection
+                  </button>
+                  <button
+                    onClick={() => setShowLlmSettingsModal(false)}
+                    className="px-3 py-1.5 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors"
+                  >
+                    Done
                   </button>
                 </div>
               </div>
