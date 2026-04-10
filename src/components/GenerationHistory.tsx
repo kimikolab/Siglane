@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { GenerationHistoryEntry } from "@/types";
 
 interface GenerationHistoryProps {
@@ -15,6 +15,18 @@ export default function GenerationHistory({
   onClear,
 }: GenerationHistoryProps) {
   const [expanded, setExpanded] = useState(true);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  const closeLightbox = useCallback(() => setLightboxUrl(null), []);
+
+  useEffect(() => {
+    if (!lightboxUrl) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLightbox();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxUrl, closeLightbox]);
 
   if (entries.length === 0) return null;
 
@@ -57,8 +69,32 @@ export default function GenerationHistory({
                 key={entry.id}
                 entry={entry}
                 comfyConnected={comfyConnected}
+                onImageClick={setLightboxUrl}
               />
             ))}
+        </div>
+      )}
+
+      {/* Lightbox overlay */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-pointer"
+          onClick={closeLightbox}
+        >
+          <button
+            onClick={closeLightbox}
+            className="absolute top-4 right-4 text-neutral-400 hover:text-white text-2xl leading-none"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxUrl}
+            alt="Preview"
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
@@ -68,9 +104,11 @@ export default function GenerationHistory({
 function HistoryEntry({
   entry,
   comfyConnected,
+  onImageClick,
 }: {
   entry: GenerationHistoryEntry;
   comfyConnected: boolean;
+  onImageClick: (url: string) => void;
 }) {
   const [showParams, setShowParams] = useState(false);
   const date = new Date(entry.createdAt);
@@ -117,23 +155,21 @@ function HistoryEntry({
       {entry.imageUrls.length > 0 && (
         <div className="flex gap-2 mt-2 overflow-x-auto">
           {entry.imageUrls.map((url, i) => (
-            <a
+            <button
               key={i}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={() => onImageClick(url)}
               className="flex-shrink-0"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={url}
                 alt={`gen-${i}`}
-                className="h-40 w-auto rounded border border-neutral-700 hover:border-neutral-500 transition-colors object-cover"
+                className="h-40 w-auto rounded border border-neutral-700 hover:border-neutral-400 transition-colors object-cover"
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
               />
-            </a>
+            </button>
           ))}
           {!comfyConnected && (
             <div className="flex items-center text-[10px] text-neutral-600 px-2">
