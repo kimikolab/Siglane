@@ -1,5 +1,7 @@
-// ComfyUI WebSocket接続ユーティリティ
-// 生成完了を検知して画像URLを取得する
+// ComfyUI 生成完了検知ユーティリティ
+// /history/{promptId} をポーリングして完了を検出する
+// WebSocketのイベント形式がComfyUIバージョンによって異なるため、
+// より安定したポーリング方式を採用
 
 import type { ComfyConnection } from "./comfyApi";
 
@@ -9,27 +11,19 @@ export interface ComfyExecutionResult {
 }
 
 // ComfyUIの /history/{promptId} から生成画像のURLを取得
-export async function fetchHistoryImages(
+// 未完了の場合はnullを返す
+async function fetchHistoryImages(
   connection: ComfyConnection,
   promptId: string,
-): Promise<string[]> {
+): Promise<string[] | null> {
   const baseUrl = connection.url.replace(/\/+$/, "");
   try {
-    const historyUrl = `${baseUrl}/history/${promptId}`;
-    console.log("[Siglane WS] Fetching history:", historyUrl);
-    const resp = await fetch(historyUrl);
-    if (!resp.ok) {
-      console.error("[Siglane WS] History fetch failed:", resp.status);
-      return [];
-    }
+    const resp = await fetch(`${baseUrl}/history/${promptId}`);
+    if (!resp.ok) return null;
     const data = await resp.json();
-    console.log("[Siglane WS] History data keys:", Object.keys(data));
 
     const entry = data[promptId];
-    if (!entry?.outputs) {
-      console.warn("[Siglane WS] No outputs in history entry");
-      return [];
-    }
+    if (!entry?.outputs) return null; // まだ完了していない
 
     const urls: string[] = [];
     for (const nodeOutput of Object.values(entry.outputs) as Array<Record<string, unknown>>) {
@@ -47,13 +41,12 @@ export async function fetchHistoryImages(
       }
     }
     return urls;
-  } catch (err) {
-    console.error("[Siglane WS] History fetch error:", err);
-    return [];
+  } catch {
+    return null;
   }
 }
 
-// WebSocket接続してpromptIdの実行完了を監視
+// /history/{promptId} をポーリングして生成完了を待つ
 // 完了時にcallbackを呼ぶ
 export function watchExecution(
   connection: ComfyConnection,
@@ -61,81 +54,39 @@ export function watchExecution(
   onComplete: (result: ComfyExecutionResult) => void,
   onError?: (error: string) => void,
 ): () => void {
-  const wsUrl = connection.url
-    .replace(/\/+$/, "")
-    .replace(/^http/, "ws") + "/ws";
+  let cancelled = false;
+  const POLL_INTERVAL = 2000; // 2秒ごと
+  const MAX_WAIT = 300000;    // 5分タイムアウト
+  const startTime = Date.now();
 
-  let ws: WebSocket | null = null;
-  let closed = false;
+  const poll = async () => {
+    if (cancelled) return;
 
-  try {
-    ws = new WebSocket(wsUrl);
-    console.log("[Siglane WS] Connecting to", wsUrl, "for prompt", promptId);
-  } catch (err) {
-    onError?.(`WebSocket connection failed: ${err}`);
-    return () => {};
-  }
-
-  ws.onopen = () => {
-    console.log("[Siglane WS] Connected");
-  };
-
-  ws.onmessage = async (event) => {
-    // バイナリメッセージ（プレビュー画像等）はスキップ
-    if (typeof event.data !== "string") return;
-
-    try {
-      const msg = JSON.parse(event.data);
-      console.log("[Siglane WS] Message:", msg.type, msg.data);
-
-      // ComfyUIの完了シグナル:
-      // { type: "executing", data: { node: null, prompt_id: "..." } }
-      // node が null = 全ノード実行完了
-      if (
-        msg.type === "executing" &&
-        msg.data?.prompt_id === promptId &&
-        msg.data?.node === null
-      ) {
-        console.log("[Siglane WS] Execution complete, fetching history...");
-        // historyに書き込まれるまで少し待つ
-        setTimeout(async () => {
-          if (closed) return;
-          const imageUrls = await fetchHistoryImages(connection, promptId);
-          console.log("[Siglane WS] History images:", imageUrls);
-          onComplete({ promptId, imageUrls });
-          ws?.close();
-          closed = true;
-        }, 1000);
-      }
-    } catch {
-      // JSONパース失敗は無視
+    if (Date.now() - startTime > MAX_WAIT) {
+      onError?.("Generation timed out (5 min)");
+      return;
     }
-  };
 
-  ws.onerror = (evt) => {
-    console.error("[Siglane WS] Error:", evt);
-    if (!closed) {
-      onError?.("WebSocket connection error");
+    const imageUrls = await fetchHistoryImages(connection, promptId);
+
+    if (cancelled) return;
+
+    if (imageUrls !== null) {
+      // 完了
+      onComplete({ promptId, imageUrls });
+      return;
     }
+
+    // まだ完了していない → 再ポーリング
+    setTimeout(poll, POLL_INTERVAL);
   };
 
-  ws.onclose = (evt) => {
-    console.log("[Siglane WS] Closed:", evt.code, evt.reason);
-  };
-
-  // 120秒タイムアウト（重い生成に対応）
-  const timeout = setTimeout(() => {
-    if (!closed) {
-      closed = true;
-      ws?.close();
-      onError?.("Generation timed out (120s)");
-    }
-  }, 120000);
+  // 最初のポーリングは3秒後（生成開始直後はまだ結果がないため）
+  const initialTimer = setTimeout(poll, 3000);
 
   // クリーンアップ関数
   return () => {
-    closed = true;
-    clearTimeout(timeout);
-    ws?.close();
+    cancelled = true;
+    clearTimeout(initialTimer);
   };
 }
