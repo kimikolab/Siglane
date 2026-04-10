@@ -38,6 +38,7 @@ import {
 import {
   extractComfyPngMetadata,
   generateThumbnail,
+  generateThumbnailFromUrl,
 } from "@/utils/pngMetadata";
 import {
   type ComfySettings,
@@ -1036,6 +1037,7 @@ export default function Home() {
               createdAt: new Date().toISOString(),
             };
 
+            // 履歴をセッションに追加
             setAppState((prev) => ({
               ...prev,
               sessions: prev.sessions.map((s) =>
@@ -1051,6 +1053,35 @@ export default function Home() {
                   : s
               ),
             }));
+
+            // 手動PNG importがない場合のみ、生成画像を自動サムネイルに設定
+            // setAppStateの外でcurrent stateを参照するためfunctional formで確認
+            const firstUrl = execResult.imageUrls[0];
+            if (firstUrl) {
+              setAppState((prev) => {
+                const session = prev.sessions.find(
+                  (s) => s.id === snapshotSessionId,
+                );
+                // 手動importのサムネイルがあれば何もしない
+                if (session?.thumbnailDataUrl) return prev;
+                // なければ非同期でサムネイルを取得
+                generateThumbnailFromUrl(firstUrl)
+                  .then((dataUrl) => {
+                    setAppState((prev2) => ({
+                      ...prev2,
+                      sessions: prev2.sessions.map((s) =>
+                        s.id === snapshotSessionId && !s.thumbnailDataUrl
+                          ? { ...s, thumbnailDataUrl: dataUrl }
+                          : s,
+                      ),
+                    }));
+                  })
+                  .catch(() => {
+                    // ComfyUIオフライン等、取得失敗は無視
+                  });
+                return prev; // stateは変えない（非同期完了後に別途更新）
+              });
+            }
 
             setGenerateToast({
               message: `Done! ${execResult.imageUrls.length} image(s)`,

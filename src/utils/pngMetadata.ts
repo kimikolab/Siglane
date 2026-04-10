@@ -150,3 +150,39 @@ export async function generateThumbnail(
     img.src = url;
   });
 }
+
+/**
+ * URLから画像を取得してサムネイル（base64 dataURL）を生成する
+ * ComfyUI生成履歴のimageUrls（/view?filename=...）から永続化サムネイルを作成するために使用
+ */
+export async function generateThumbnailFromUrl(
+  imageUrl: string,
+  maxSize = 256,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const ratio = Math.min(maxSize / img.width, maxSize / img.height, 1);
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Canvas context unavailable"));
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.82));
+    };
+
+    img.onerror = () => {
+      reject(new Error(`Failed to load image from URL: ${imageUrl}`));
+    };
+
+    img.src = imageUrl;
+  });
+}
