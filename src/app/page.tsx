@@ -1225,6 +1225,10 @@ export default function Home() {
               onUpdateAnnotation={handleDictUpdateAnnotation}
               onDeleteAnnotation={handleDictDeleteAnnotation}
               onUpdateGroup={handleDictUpdateGroup}
+              onOpenBulkNotes={(json) => {
+                setBulkAnnotationText(json);
+                setShowBulkAnnotation(true);
+              }}
             />
           ) : (
           <>
