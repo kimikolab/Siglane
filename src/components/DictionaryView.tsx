@@ -34,6 +34,12 @@ export default function DictionaryView({
   // --- タブ ---
   const [activeTab, setActiveTab] = useState<"tags" | "presets">("tags");
 
+  // --- 新規タグ追加 ---
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const [addTagKey, setAddTagKey] = useState("");
+  const [addTagDesc, setAddTagDesc] = useState("");
+  const [addTagGroup, setAddTagGroup] = useState("");
+
   // --- Select mode ---
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -126,6 +132,21 @@ export default function DictionaryView({
     }));
     onOpenBulkNotes(JSON.stringify(entries, null, 2));
   }, [selectedKeys, annotations, defaultGroups, onOpenBulkNotes]);
+
+  const resetAddTag = useCallback(() => {
+    setIsAddingTag(false);
+    setAddTagKey("");
+    setAddTagDesc("");
+    setAddTagGroup("");
+  }, []);
+
+  const handleAddTag = useCallback(() => {
+    const key = addTagKey.trim().toLowerCase();
+    if (!key) return;
+    if (addTagDesc.trim()) onUpdateAnnotation(key, addTagDesc.trim());
+    if (addTagGroup.trim()) onUpdateGroup(key, addTagGroup.trim());
+    resetAddTag();
+  }, [addTagKey, addTagDesc, addTagGroup, onUpdateAnnotation, onUpdateGroup, resetAddTag]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -248,7 +269,70 @@ export default function DictionaryView({
         <span className="text-[11px] text-neutral-600">
           {filteredEntries.length}{searchQuery ? " results" : " total"}
         </span>
+        {!isSelectMode && (
+          <button
+            onClick={() => setIsAddingTag(true)}
+            className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors flex-shrink-0"
+            title="Add a new tag"
+          >
+            + New Tag
+          </button>
+        )}
       </div>
+
+      {/* 新規タグ追加フォーム */}
+      {isAddingTag && (
+        <div className="bg-neutral-800 border border-neutral-700/60 rounded-lg px-3 py-2.5 mb-3 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={addTagKey}
+              onChange={(e) => setAddTagKey(e.target.value)}
+              placeholder="Tag name..."
+              autoFocus
+              className="w-40 bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-sm font-mono text-neutral-200 focus:outline-none focus:border-sky-500"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddTag();
+                if (e.key === "Escape") resetAddTag();
+              }}
+            />
+            <input
+              type="text"
+              value={addTagDesc}
+              onChange={(e) => setAddTagDesc(e.target.value)}
+              placeholder="Description..."
+              className="flex-1 bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-sm text-neutral-200 focus:outline-none focus:border-sky-500 min-w-0"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddTag();
+                if (e.key === "Escape") resetAddTag();
+              }}
+            />
+            <select
+              value={addTagGroup}
+              onChange={(e) => setAddTagGroup(e.target.value)}
+              className="bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-sky-500 cursor-pointer"
+            >
+              <option value="">Group...</option>
+              {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleAddTag}
+              disabled={!addTagKey.trim() || (!addTagDesc.trim() && !addTagGroup)}
+              className="px-2.5 py-1 text-xs bg-sky-600 hover:bg-sky-500 text-white rounded transition-colors disabled:opacity-40"
+            >
+              Add
+            </button>
+            <button
+              onClick={resetAddTag}
+              className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Select mode action bar */}
       {isSelectMode && (

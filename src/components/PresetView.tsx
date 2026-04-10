@@ -4,6 +4,8 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { DictionaryEntry, DEFAULT_GROUP_CATEGORIES } from "@/types";
 import {
   loadDictionary,
+  addEntry,
+  createEntry,
   deleteEntry,
   renameEntry,
   updateEntryPrompts,
@@ -58,6 +60,13 @@ export default function PresetView() {
   const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
   const [expandedPresetId, setExpandedPresetId] = useState<string | null>(null);
 
+  // --- 新規作成 ---
+  const [isCreating, setIsCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newCategory, setNewCategory] = useState("");
+  const [newPrompts, setNewPrompts] = useState("");
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+
   // localStorage から読み込み
   useEffect(() => {
     setAllEntries(loadDictionary());
@@ -66,6 +75,27 @@ export default function PresetView() {
   const reload = useCallback(() => {
     setAllEntries(loadDictionary());
   }, []);
+
+  const resetCreating = useCallback(() => {
+    setIsCreating(false);
+    setNewName("");
+    setNewCategory("");
+    setNewPrompts("");
+    setShowCategoryDropdown(false);
+  }, []);
+
+  const handleCreate = useCallback(() => {
+    const name = newName.trim();
+    const category = newCategory.trim();
+    const prompts = newPrompts
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (!name || !category || prompts.length === 0) return;
+    addEntry(createEntry(name, category, prompts));
+    resetCreating();
+    reload();
+  }, [newName, newCategory, newPrompts, resetCreating, reload]);
 
   // 検索フィルタ
   const filteredEntries = useMemo(() => {
@@ -154,13 +184,18 @@ export default function PresetView() {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* ヘッダー */}
-      <div className="flex items-start justify-between mb-3 flex-shrink-0">
-        <div>
-          <p className="text-xs text-neutral-500 mt-1">
-            {allEntries.length} presets in{" "}
-            {new Set(allEntries.map((e) => e.category)).size} categories
-          </p>
-        </div>
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <p className="text-xs text-neutral-500">
+          {allEntries.length} presets in{" "}
+          {new Set(allEntries.map((e) => e.category)).size} categories
+        </p>
+        <button
+          onClick={() => setIsCreating(true)}
+          className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+          title="New preset"
+        >
+          + New Preset
+        </button>
       </div>
 
       {/* 検索 */}
@@ -187,6 +222,86 @@ export default function PresetView() {
           {searchQuery ? " results" : " total"}
         </span>
       </div>
+
+      {/* 新規作成フォーム */}
+      {isCreating && (
+        <div className="bg-neutral-800 border border-neutral-700/60 rounded-lg px-4 py-3 mb-4 flex-shrink-0 space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Preset name..."
+              autoFocus
+              className="flex-1 bg-neutral-900 border border-neutral-600 rounded px-2.5 py-1.5 text-sm text-neutral-200 focus:outline-none focus:border-sky-500"
+            />
+            <div className="relative">
+              <button
+                onClick={() => setShowCategoryDropdown((p) => !p)}
+                className="px-2.5 py-1.5 text-sm bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded truncate max-w-[200px]"
+              >
+                {newCategory || "Category..."}
+              </button>
+              {showCategoryDropdown && (
+                <div
+                  className="absolute top-full right-0 mt-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[180px] max-h-[240px] overflow-y-auto"
+                  style={{ zIndex: 50 }}
+                >
+                  {allCategoryPaths.map((path) => (
+                    <button
+                      key={path}
+                      onClick={() => {
+                        setNewCategory(path);
+                        setShowCategoryDropdown(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700 transition-colors truncate"
+                    >
+                      {path}
+                    </button>
+                  ))}
+                  <div className="border-t border-neutral-700 mt-1 pt-1 px-3 py-1">
+                    <input
+                      type="text"
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      placeholder="Custom path..."
+                      className="w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-neutral-400"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") setShowCategoryDropdown(false);
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <textarea
+            value={newPrompts}
+            onChange={(e) => setNewPrompts(e.target.value)}
+            rows={4}
+            placeholder="One prompt per line..."
+            className="w-full bg-neutral-900 border border-neutral-600 rounded px-2.5 py-1.5 text-xs font-mono text-neutral-200 focus:outline-none focus:border-sky-500 resize-y"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCreate}
+              disabled={!newName.trim() || !newCategory.trim() || !newPrompts.trim()}
+              className="px-3 py-1 text-xs bg-sky-600 hover:bg-sky-500 text-white rounded transition-colors disabled:opacity-40"
+            >
+              Create
+            </button>
+            <button
+              onClick={resetCreating}
+              className="px-3 py-1 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+            >
+              Cancel
+            </button>
+            <span className="text-[10px] text-neutral-600 ml-auto">
+              {newPrompts.split("\n").filter((s) => s.trim()).length} prompts
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ツリー表示 */}
       <div className="flex-1 overflow-y-auto sidebar-scroll pb-4">
@@ -281,18 +396,11 @@ function TreeNodeView({
         <span className="text-neutral-500 text-xs w-4 text-center flex-shrink-0">
           {isCollapsed ? "▶" : "▼"}
         </span>
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          className="flex-shrink-0 text-neutral-500"
-        >
-          <path d="M2 4.5A1.5 1.5 0 013.5 3H6l1.5 1.5h5A1.5 1.5 0 0114 6v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 11.5v-7z" />
-        </svg>
-        <span className="text-sm font-medium text-neutral-200 flex-1 min-w-0 truncate">
+        <span className={`text-sm flex-1 min-w-0 truncate ${
+          depth === 0
+            ? "font-medium text-sky-400/80"
+            : "text-neutral-300"
+        }`}>
           {node.label}
         </span>
         <span className="text-[10px] text-neutral-600 flex-shrink-0">
