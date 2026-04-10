@@ -51,3 +51,58 @@ export function createEntry(
     createdAt: new Date().toISOString(),
   };
 }
+
+// --- 拡張CRUD ---
+
+export function renameEntry(id: string, newLabel: string): DictionaryEntry[] {
+  const entries = loadDictionary();
+  const entry = entries.find((e) => e.id === id);
+  if (entry) entry.label = newLabel.trim();
+  saveDictionary(entries);
+  return entries;
+}
+
+export function updateEntryPrompts(id: string, prompts: string[]): DictionaryEntry[] {
+  const entries = loadDictionary();
+  const entry = entries.find((e) => e.id === id);
+  if (entry) entry.prompts = prompts;
+  saveDictionary(entries);
+  return entries;
+}
+
+export function updateEntryCategory(id: string, newCategory: string): DictionaryEntry[] {
+  const entries = loadDictionary();
+  const entry = entries.find((e) => e.id === id);
+  if (entry) entry.category = newCategory.trim();
+  saveDictionary(entries);
+  return entries;
+}
+
+export function duplicateEntry(id: string): DictionaryEntry[] {
+  const entries = loadDictionary();
+  const source = entries.find((e) => e.id === id);
+  if (!source) return entries;
+
+  const existingLabels = entries
+    .filter((e) => e.category === source.category)
+    .map((e) => e.label);
+
+  let n = 1;
+  let candidate = `${source.label} (${n})`;
+  while (existingLabels.includes(candidate)) {
+    n++;
+    candidate = `${source.label} (${n})`;
+  }
+
+  const copy: DictionaryEntry = {
+    id: crypto.randomUUID(),
+    label: candidate,
+    category: source.category,
+    prompts: [...source.prompts],
+    note: source.note,
+    createdAt: new Date().toISOString(),
+  };
+  entries.push(copy);
+  saveDictionary(entries);
+  return entries;
+}

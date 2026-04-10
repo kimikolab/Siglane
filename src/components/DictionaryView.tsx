@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { DEFAULT_GROUP_CATEGORIES } from "@/types";
+import PresetView from "./PresetView";
 
 interface DictionaryEntry {
   key: string;        // normalized tag key
@@ -29,6 +30,9 @@ export default function DictionaryView({
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // --- タブ ---
+  const [activeTab, setActiveTab] = useState<"tags" | "presets">("tags");
 
   // --- Select mode ---
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -125,16 +129,41 @@ export default function DictionaryView({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* ヘッダー */}
-      <div className="flex items-start justify-between mb-5 flex-shrink-0">
-        <div>
-          <h1 className="text-base font-medium text-neutral-100">Dictionary</h1>
-          <p className="text-xs text-neutral-500 mt-1">
+      {/* ヘッダー + タブ */}
+      <div className="flex items-center gap-4 mb-4 flex-shrink-0">
+        <h1 className="text-base font-medium text-neutral-100">Dictionary</h1>
+        <div className="flex gap-1 bg-neutral-800 rounded-lg p-0.5">
+          <button
+            onClick={() => { setActiveTab("tags"); exitSelectMode(); }}
+            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+              activeTab === "tags"
+                ? "bg-neutral-700 text-neutral-100"
+                : "text-neutral-500 hover:text-neutral-300"
+            }`}
+          >
+            Tags
+          </button>
+          <button
+            onClick={() => { setActiveTab("presets"); exitSelectMode(); }}
+            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+              activeTab === "presets"
+                ? "bg-neutral-700 text-neutral-100"
+                : "text-neutral-500 hover:text-neutral-300"
+            }`}
+          >
+            Presets
+          </button>
+        </div>
+        <div className="flex-1" />
+        {activeTab === "tags" && (
+          <p className="text-xs text-neutral-500">
             {allEntries.length} tags — {Object.keys(annotations).length} annotated, {Object.keys(defaultGroups).length} grouped
           </p>
-        </div>
+        )}
       </div>
 
+      {activeTab === "tags" ? (
+      <>
       {/* 検索 + ビュー切り替え */}
       <div className="flex items-center gap-3 mb-4 flex-shrink-0">
         <div className="flex-1 relative">
@@ -518,6 +547,10 @@ export default function DictionaryView({
         </div>
       )}
       </div>
+      </>
+      ) : (
+        <PresetView />
+      )}
     </div>
   );
 }
