@@ -1216,8 +1216,8 @@ export default function Home() {
       />
 
       {/* メインエディタ */}
-      <div className={`flex-1 ${isDictionaryView ? "overflow-hidden" : "overflow-y-auto"}`}>
-        <div className={`max-w-4xl mx-auto ${isDictionaryView ? "h-full flex flex-col p-6 pb-0" : "p-6"}`}>
+      <div className="flex-1 overflow-hidden">
+        <div className="max-w-4xl mx-auto h-full flex flex-col p-6 pb-0">
           {isDictionaryView ? (
             <DictionaryView
               annotations={annotations}
@@ -1233,7 +1233,7 @@ export default function Home() {
           ) : (
           <>
           {/* ステータスバー */}
-          <div className="flex items-start justify-between mb-5">
+          <div className="flex items-start justify-between mb-5 flex-shrink-0">
             {/* 左: セッション名 + テンプレートバッジ */}
             <div className="min-w-0 flex-1">
               {activeSession && (
@@ -1443,6 +1443,7 @@ export default function Home() {
             </div>
           </div>
 
+          <div className="flex-1 overflow-y-auto sidebar-scroll pb-6">
           {activeSession && (
             <>
               <div
@@ -1793,6 +1794,7 @@ export default function Home() {
               )}
             </>
           )}
+          </div>
           </>
           )}
         </div>
