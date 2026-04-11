@@ -164,6 +164,7 @@ export default function Home() {
   const [annotations, setAnnotations] = useState<Record<string, string>>({});
   const [showBulkAnnotation, setShowBulkAnnotation] = useState(false);
   const [bulkAnnotationText, setBulkAnnotationText] = useState("");
+  const [bulkNotesFilter, setBulkNotesFilter] = useState<"unannotated" | "missing_group" | "all">("unannotated");
   const [defaultGroups, setDefaultGroups] = useState<DefaultGroups>({});
   const [negativeTags, setNegativeTags] = useState<NegativeTags>({});
   useEffect(() => {
@@ -221,6 +222,30 @@ export default function Home() {
   const activeSession = appState.sessions.find(
     (s) => s.id === appState.activeSessionId
   );
+
+  const collectBulkNotes = useCallback((filter: "unannotated" | "missing_group" | "all") => {
+    if (!activeSession) return;
+    const allTexts = [
+      ...activeSession.positiveLines,
+      ...activeSession.negativeLines,
+    ].map((l) => l.text);
+    const unique = [...new Set(allTexts.map((t) => normalizeForLookup(t)))];
+    let filtered: string[];
+    if (filter === "unannotated") {
+      filtered = unique.filter((key) => !annotations[key]);
+    } else if (filter === "missing_group") {
+      filtered = unique.filter((key) => annotations[key] && !defaultGroups[key]);
+    } else {
+      filtered = unique;
+    }
+    const jsonEntries = filtered.map((key) => ({
+      tag: key,
+      description: filter === "missing_group" ? (annotations[key] ?? "") : "",
+      group: defaultGroups[key] ?? "",
+      ...(negativeTags[key] ? { negative: true } : {}),
+    }));
+    setBulkAnnotationText(JSON.stringify(jsonEntries, null, 2));
+  }, [activeSession, annotations, defaultGroups, negativeTags]);
 
   const updateActiveSession = useCallback(
     (updater: (session: Session) => Session) => {
@@ -1736,22 +1761,7 @@ export default function Home() {
                     <div className="flex-1" />
                     <button
                       onClick={() => {
-                        if (!activeSession) return;
-                        const allTexts = [
-                          ...activeSession.positiveLines,
-                          ...activeSession.negativeLines,
-                        ].map((l) => l.text);
-                        const unique = [...new Set(allTexts.map((t) => normalizeForLookup(t)))];
-                        const unannotated = unique.filter((key) => !annotations[key]);
-                        const jsonEntries = unannotated.map((key) => ({
-                          tag: key,
-                          description: "",
-                          group: defaultGroups[key] ?? "",
-                          ...(negativeTags[key] ? { negative: true } : {}),
-                        }));
-                        setBulkAnnotationText(
-                          JSON.stringify(jsonEntries, null, 2),
-                        );
+                        collectBulkNotes(bulkNotesFilter);
                         setShowBulkAnnotation(true);
                       }}
                       className="flex items-center gap-1 px-2 py-1 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
@@ -2132,6 +2142,26 @@ export default function Home() {
                 <br />
                 <span className="text-neutral-500">Each entry: <code className="text-neutral-400">{`{"tag", "description", "group", "negative"}`}</code>. <code className="text-neutral-400">negative</code> is optional (default false).</span>
               </p>
+              {/* Filter selector */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs text-neutral-500">Filter:</span>
+                {(["unannotated", "missing_group", "all"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => {
+                      setBulkNotesFilter(f);
+                      collectBulkNotes(f);
+                    }}
+                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                      bulkNotesFilter === f
+                        ? "bg-neutral-600 text-neutral-200"
+                        : "bg-neutral-800 text-neutral-500 hover:text-neutral-300"
+                    }`}
+                  >
+                    {f === "unannotated" ? "Unannotated" : f === "missing_group" ? "Missing group" : "All"}
+                  </button>
+                ))}
+              </div>
               {/* LLM Auto-fill */}
               <div className="flex items-center gap-2 mb-3">
                 <button
