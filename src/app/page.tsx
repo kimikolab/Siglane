@@ -225,22 +225,35 @@ export default function Home() {
 
   const collectBulkNotes = useCallback((filter: "unannotated" | "missing_group" | "all") => {
     if (!activeSession) return;
-    const allTexts = [
+    const allLines = [
       ...activeSession.positiveLines,
       ...activeSession.negativeLines,
-    ].map((l) => l.text);
-    const unique = [...new Set(allTexts.map((t) => normalizeForLookup(t)))];
+    ];
+    const unique = [...new Set(allLines.map((l) => normalizeForLookup(l.text)))];
+
+    // セッション内でgroupIdが付いていて、かつグループ定義が実在するタグのセット
+    const sessionGroups = [
+      ...(activeSession.positiveGroups ?? []),
+      ...(activeSession.negativeGroups ?? []),
+    ];
+    const groupIds = new Set(sessionGroups.map((g) => g.id));
+    const groupedInSession = new Set(
+      allLines
+        .filter((l) => l.groupId && groupIds.has(l.groupId))
+        .map((l) => normalizeForLookup(l.text))
+    );
+
     let filtered: string[];
     if (filter === "unannotated") {
       filtered = unique.filter((key) => !annotations[key]);
     } else if (filter === "missing_group") {
-      filtered = unique.filter((key) => annotations[key] && !defaultGroups[key]);
+      filtered = unique.filter((key) => !groupedInSession.has(key));
     } else {
       filtered = unique;
     }
     const jsonEntries = filtered.map((key) => ({
       tag: key,
-      description: filter === "missing_group" ? (annotations[key] ?? "") : "",
+      description: annotations[key] ?? "",
       group: defaultGroups[key] ?? "",
       ...(negativeTags[key] ? { negative: true } : {}),
     }));
