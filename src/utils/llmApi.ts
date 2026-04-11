@@ -54,6 +54,39 @@ export function saveLlmSettings(settings: LlmSettings): void {
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 }
 
+// OllamaベースURLを接続URLから推定
+function deriveOllamaBaseUrl(connectionUrl: string): string {
+  try {
+    const u = new URL(connectionUrl);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return "http://localhost:11434";
+  }
+}
+
+// Ollamaのモデル一覧を取得
+export async function fetchOllamaModels(
+  connectionUrl: string,
+): Promise<{ ok: true; models: string[] } | { ok: false; error: string }> {
+  const base = deriveOllamaBaseUrl(connectionUrl);
+  try {
+    const resp = await fetch(`${base}/api/tags`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) {
+      return { ok: false, error: `HTTP ${resp.status}` };
+    }
+    const data = await resp.json();
+    const models: string[] = (data.models ?? []).map(
+      (m: { name?: string }) => m.name ?? "",
+    ).filter(Boolean);
+    return { ok: true, models };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Connection refused";
+    return { ok: false, error: message };
+  }
+}
+
 // 接続テスト（モデル一覧を取得してみる）
 export async function testLlmConnection(
   connection: LlmConnection,

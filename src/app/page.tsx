@@ -75,6 +75,7 @@ import {
   testLlmConnection,
   translateTags,
   createDefaultLlmSettings,
+  fetchOllamaModels,
 } from "@/utils/llmApi";
 import {
   type DefaultGroups,
@@ -936,10 +937,31 @@ export default function Home() {
   const [llmSettings, setLlmSettings] = useState<LlmSettings>(createDefaultLlmSettings);
   const [showLlmSettingsModal, setShowLlmSettingsModal] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+
+  const refreshOllamaModels = async (url: string) => {
+    setIsLoadingModels(true);
+    const result = await fetchOllamaModels(url);
+    setIsLoadingModels(false);
+    if (result.ok) {
+      setOllamaModels(result.models);
+    } else {
+      setOllamaModels([]);
+    }
+  };
 
   useEffect(() => {
     setLlmSettings(loadLlmSettings());
   }, []);
+
+  // モーダル表示時にOllamaモデル一覧を自動取得
+  useEffect(() => {
+    if (showLlmSettingsModal) {
+      refreshOllamaModels(llmSettings.connection.url);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showLlmSettingsModal]);
 
   // WebSocketクリーンアップ（アンマウント時）
   useEffect(() => {
@@ -2399,23 +2421,71 @@ export default function Home() {
                     <label className="block text-xs text-neutral-400 mb-1">
                       Model
                     </label>
-                    <input
-                      type="text"
-                      defaultValue={llmSettings.connection.model}
-                      onBlur={(e) => {
-                        const updated = {
-                          ...llmSettings,
-                          connection: { ...llmSettings.connection, model: e.target.value.trim() },
-                        };
-                        setLlmSettings(updated);
-                        saveLlmSettings(updated);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                      }}
-                      className="w-full bg-neutral-800 border border-neutral-600 rounded px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-neutral-400 font-mono"
-                      placeholder="gemma2"
-                    />
+                    <div className="flex gap-1">
+                      {ollamaModels.length > 0 ? (
+                        <select
+                          value={llmSettings.connection.model}
+                          onChange={(e) => {
+                            const updated = {
+                              ...llmSettings,
+                              connection: { ...llmSettings.connection, model: e.target.value },
+                            };
+                            setLlmSettings(updated);
+                            saveLlmSettings(updated);
+                          }}
+                          className="flex-1 bg-neutral-800 border border-neutral-600 rounded px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-neutral-400 font-mono"
+                        >
+                          {!ollamaModels.includes(llmSettings.connection.model) && (
+                            <option value={llmSettings.connection.model}>
+                              {llmSettings.connection.model}
+                            </option>
+                          )}
+                          {ollamaModels.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          defaultValue={llmSettings.connection.model}
+                          onBlur={(e) => {
+                            const updated = {
+                              ...llmSettings,
+                              connection: { ...llmSettings.connection, model: e.target.value.trim() },
+                            };
+                            setLlmSettings(updated);
+                            saveLlmSettings(updated);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                          }}
+                          className="flex-1 bg-neutral-800 border border-neutral-600 rounded px-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-neutral-400 font-mono"
+                          placeholder="gemma2"
+                        />
+                      )}
+                      <button
+                        onClick={() => refreshOllamaModels(llmSettings.connection.url)}
+                        disabled={isLoadingModels}
+                        className="px-2 py-2 bg-neutral-700 hover:bg-neutral-600 text-neutral-400 hover:text-neutral-200 rounded transition-colors disabled:opacity-40"
+                        title="Fetch models from Ollama"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={isLoadingModels ? "animate-spin" : ""}
+                        >
+                          <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                   <div className="flex-1">
                     <label className="block text-xs text-neutral-400 mb-1">
