@@ -29,6 +29,7 @@ import MemoBox from "@/components/MemoBox";
 import GenerationHistory from "@/components/GenerationHistory";
 import DictionaryView from "@/components/DictionaryView";
 import DictionaryBrowser from "@/components/DictionaryBrowser";
+import PresetBrowser from "@/components/PresetBrowser";
 import SessionSidebar from "@/components/SessionSidebar";
 import { WeightMode } from "@/components/PromptLineItem";
 import {
@@ -159,7 +160,7 @@ export default function Home() {
   const [headerRenameValue, setHeaderRenameValue] = useState("");
   const [weightMode, setWeightMode] = useState<WeightMode>("combined");
   const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
-  const [rightPanelTab, setRightPanelTab] = useState<"history" | "dictionary">("history");
+  const [rightPanelTab, setRightPanelTab] = useState<"history" | "dictionary" | "presets">("history");
   const [isDictionaryFullView, setIsDictionaryFullView] = useState(false);
 
   // --- プロンプト注釈 ---
@@ -986,6 +987,39 @@ export default function Home() {
       });
     },
     [activeSession, updateActiveSession, defaultGroups],
+  );
+
+  const handlePresetBrowserAdd = useCallback(
+    (type: "positive" | "negative", prompts: string[], groupLabel: string) => {
+      if (!activeSession) return;
+      const linesKey = type === "positive" ? "positiveLines" : "negativeLines";
+      const groupsKey = type === "positive" ? "positiveGroups" : "negativeGroups";
+
+      updateActiveSession((s) => {
+        const existingLines = [...(s[linesKey] as PromptLine[])];
+        const groups = [...(s[groupsKey] ?? [])];
+
+        // プリセットのカテゴリをグループとして使用
+        let group = groups.find((g) => g.label === groupLabel);
+        if (!group) {
+          group = { id: crypto.randomUUID(), label: groupLabel, order: groups.length };
+          groups.push(group);
+        }
+
+        const newLines = prompts.map((p) => {
+          const line = createPromptLine(p);
+          line.groupId = group.id;
+          return line;
+        });
+
+        return {
+          ...s,
+          [linesKey]: [...existingLines, ...newLines],
+          [groupsKey]: groups,
+        };
+      });
+    },
+    [activeSession, updateActiveSession],
   );
 
   const isTemplateActive = activeSession?.isTemplate ?? false;
@@ -1912,10 +1946,20 @@ export default function Home() {
           >
             Dictionary
           </button>
+          <button
+            onClick={() => setRightPanelTab("presets")}
+            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+              rightPanelTab === "presets"
+                ? "bg-neutral-700 text-neutral-200"
+                : "text-neutral-500 hover:text-neutral-300"
+            }`}
+          >
+            Presets
+          </button>
         </div>
 
         {/* タブコンテンツ */}
-        {rightPanelTab === "history" ? (
+        {rightPanelTab === "history" && (
           <div className="flex-1 overflow-y-auto sidebar-scroll px-3 pb-4">
             {activeSession ? (
               <GenerationHistory
@@ -1934,7 +1978,8 @@ export default function Home() {
               </div>
             )}
           </div>
-        ) : (
+        )}
+        {rightPanelTab === "dictionary" && (
           <div className="flex-1 min-h-0 flex flex-col px-3 pb-3">
             {activeSession ? (
               <DictionaryBrowser
@@ -1951,6 +1996,16 @@ export default function Home() {
                 No session selected
               </div>
             )}
+          </div>
+        )}
+        {rightPanelTab === "presets" && (
+          <div className="flex-1 min-h-0 flex flex-col px-3 pb-3">
+            <PresetBrowser
+              onAddPreset={handlePresetBrowserAdd}
+              onOpenManage={() => {
+                setIsDictionaryFullView(true);
+              }}
+            />
           </div>
         )}
       </div>
