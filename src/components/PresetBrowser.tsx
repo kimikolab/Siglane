@@ -6,7 +6,7 @@ import { loadDictionary } from "@/utils/dictionary";
 
 interface PresetBrowserProps {
   /** Add all prompts from a preset to the session */
-  onAddPreset: (type: "positive" | "negative", prompts: string[], groupLabel: string) => void;
+  onAddPreset: (type: "positive" | "negative", prompts: string[]) => void;
   /** Open full preset management view */
   onOpenManage: () => void;
 }
@@ -106,7 +106,7 @@ export default function PresetBrowser({
   const handleAdd = useCallback(
     (entry: DictionaryEntry, shiftKey: boolean) => {
       const type = shiftKey ? "negative" : "positive";
-      onAddPreset(type, entry.prompts, entry.category);
+      onAddPreset(type, entry.prompts);
     },
     [onAddPreset],
   );

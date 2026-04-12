@@ -990,7 +990,7 @@ export default function Home() {
   );
 
   const handlePresetBrowserAdd = useCallback(
-    (type: "positive" | "negative", prompts: string[], groupLabel: string) => {
+    (type: "positive" | "negative", prompts: string[]) => {
       if (!activeSession) return;
       const linesKey = type === "positive" ? "positiveLines" : "negativeLines";
       const groupsKey = type === "positive" ? "positiveGroups" : "negativeGroups";
@@ -999,18 +999,20 @@ export default function Home() {
         const existingLines = s[linesKey] as PromptLine[];
         const groups: PromptGroup[] = [...(s[groupsKey] ?? [])];
 
-        // プリセットのカテゴリをグループとして使用
-        let existingGroup = groups.find((g) => g.label === groupLabel);
-        if (!existingGroup) {
-          existingGroup = { id: crypto.randomUUID(), label: groupLabel, order: groups.length };
-          groups.push(existingGroup);
-        }
-        const groupId = existingGroup.id;
-
-        const newLines: PromptLine[] = prompts.map((p) => ({
-          ...createPromptLine(p),
-          groupId,
-        }));
+        // 各タグのdefaultGroupsを参照してグループを個別に付与
+        const newLines: PromptLine[] = prompts.map((p) => {
+          const line = createPromptLine(p);
+          const groupLabel = defaultGroups[normalizeForLookup(p)];
+          if (groupLabel) {
+            let group = groups.find((g) => g.label === groupLabel);
+            if (!group) {
+              group = { id: crypto.randomUUID(), label: groupLabel, order: groups.length };
+              groups.push(group);
+            }
+            return { ...line, groupId: group.id };
+          }
+          return line;
+        });
 
         return {
           ...s,
@@ -1019,7 +1021,7 @@ export default function Home() {
         };
       });
     },
-    [activeSession, updateActiveSession],
+    [activeSession, updateActiveSession, defaultGroups],
   );
 
   const isTemplateActive = activeSession?.isTemplate ?? false;
