@@ -275,7 +275,7 @@ export default function PromptLineItem({
         )}
 
         {/* グループバッジ（クリックで変更可能） */}
-        {!isEditing && !isSelectMode && onSetLineGroup && (
+        {!isEditing && !isSelectMode && onSetLineGroup && !groupLabel && (
           <div className="relative flex-shrink-0">
             <button
               onClick={(e) => {
