@@ -48,6 +48,7 @@ export default function DictionaryBrowser({
 }: DictionaryBrowserProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "positive" | "negative">("all");
 
   // Build entries from annotations + defaultGroups
   const entries = useMemo(() => {
@@ -77,6 +78,12 @@ export default function DictionaryBrowser({
   // Filter
   const filtered = useMemo(() => {
     let result = entries;
+    // Type filter (P/N)
+    if (typeFilter === "positive") {
+      result = result.filter((e) => !e.isNegative);
+    } else if (typeFilter === "negative") {
+      result = result.filter((e) => e.isNegative);
+    }
     if (groupFilter !== "all") {
       if (groupFilter === "__ungrouped__") {
         result = result.filter((e) => !e.group);
@@ -94,7 +101,7 @@ export default function DictionaryBrowser({
       );
     }
     return result;
-  }, [entries, groupFilter, searchQuery]);
+  }, [entries, groupFilter, searchQuery, typeFilter]);
 
   // Set of normalized keys currently in session
   const existingKeys = useMemo(() => {
@@ -134,11 +141,28 @@ export default function DictionaryBrowser({
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full bg-neutral-800 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-neutral-500"
         />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {/* P/N filter */}
+          <div className="flex gap-0.5 bg-neutral-800 rounded p-0.5">
+            {(["all", "positive", "negative"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTypeFilter(t)}
+                className={`px-1.5 py-0.5 text-[10px] rounded transition-colors ${
+                  typeFilter === t
+                    ? "bg-neutral-700 text-neutral-200"
+                    : "text-neutral-500 hover:text-neutral-300"
+                }`}
+              >
+                {t === "all" ? "All" : t === "positive" ? "P" : "N"}
+              </button>
+            ))}
+          </div>
+          {/* Group filter */}
           <select
             value={groupFilter}
             onChange={(e) => setGroupFilter(e.target.value)}
-            className="flex-1 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-[11px] text-neutral-300 focus:outline-none focus:border-neutral-500"
+            className="flex-1 min-w-0 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-[11px] text-neutral-300 focus:outline-none focus:border-neutral-500"
           >
             <option value="all">All groups</option>
             <option value="__ungrouped__">Ungrouped</option>

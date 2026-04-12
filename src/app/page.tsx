@@ -959,13 +959,33 @@ export default function Home() {
     (type: "positive" | "negative", tag: string) => {
       if (!activeSession) return;
       const line = createPromptLine(tag);
-      const key = type === "positive" ? "positiveLines" : "negativeLines";
-      updateActiveSession((s) => ({
-        ...s,
-        [key]: [...(s[key] as PromptLine[]), line],
-      }));
+      const linesKey = type === "positive" ? "positiveLines" : "negativeLines";
+      const groupsKey = type === "positive" ? "positiveGroups" : "negativeGroups";
+
+      updateActiveSession((s) => {
+        const lines = [...(s[linesKey] as PromptLine[])];
+        const groups = [...(s[groupsKey] ?? [])];
+
+        // defaultGroupsからグループラベルを取得
+        const groupLabel = defaultGroups[normalizeForLookup(tag)];
+        if (groupLabel) {
+          // グループを探すか作成
+          let group = groups.find((g) => g.label === groupLabel);
+          if (!group) {
+            group = { id: crypto.randomUUID(), label: groupLabel, order: groups.length };
+            groups.push(group);
+          }
+          line.groupId = group.id;
+        }
+
+        return {
+          ...s,
+          [linesKey]: [...lines, line],
+          [groupsKey]: groups,
+        };
+      });
     },
-    [activeSession, updateActiveSession],
+    [activeSession, updateActiveSession, defaultGroups],
   );
 
   const isTemplateActive = activeSession?.isTemplate ?? false;
@@ -1287,7 +1307,7 @@ export default function Home() {
         onNewFolder={handleNewFolder}
         onRenameFolder={handleRenameFolder}
         onDeleteFolder={handleDeleteFolder}
-        isDictionaryActive={rightPanelTab === "dictionary" || isDictionaryFullView}
+        isDictionaryActive={isDictionaryFullView}
         onOpenDictionary={() => setRightPanelTab("dictionary")}
       />
 
