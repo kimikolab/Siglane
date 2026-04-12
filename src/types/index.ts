@@ -87,6 +87,8 @@ export interface ComfyGenerationOverrides {
   samplerName: string;
   scheduler: string;
   denoise: number;
+  width?: number;
+  height?: number;
 }
 
 // フォルダ（2階層まで: root → subfolder）

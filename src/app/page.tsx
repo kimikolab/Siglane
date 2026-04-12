@@ -162,6 +162,16 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
   const [rightPanelTab, setRightPanelTab] = useState<"history" | "dictionary" | "presets">("history");
   const [isDictionaryFullView, setIsDictionaryFullView] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
+  const toggleSection = useCallback((section: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
+  }, []);
 
   // --- プロンプト注釈 ---
   const [annotations, setAnnotations] = useState<Record<string, string>>({});
@@ -1773,6 +1783,53 @@ export default function Home() {
                         ))}
                       </select>
                     </div>
+                    {/* resolution (EmptyLatentImageから取得時のみ表示) */}
+                    {activeSession.comfyOverrides.width && activeSession.comfyOverrides.height && (
+                      <>
+                        <span className="text-neutral-700">|</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-neutral-500">size</span>
+                          <input
+                            type="number"
+                            value={activeSession.comfyOverrides.width}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value);
+                              if (!isNaN(v) && v >= 64 && v <= 4096)
+                                handleUpdateOverrides({ width: v });
+                            }}
+                            className="w-14 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none"
+                            step={64}
+                            min={64}
+                            max={4096}
+                          />
+                          <span className="text-neutral-600">×</span>
+                          <input
+                            type="number"
+                            value={activeSession.comfyOverrides.height}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value);
+                              if (!isNaN(v) && v >= 64 && v <= 4096)
+                                handleUpdateOverrides({ height: v });
+                            }}
+                            className="w-14 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none"
+                            step={64}
+                            min={64}
+                            max={4096}
+                          />
+                          <button
+                            onClick={() => {
+                              const w = activeSession.comfyOverrides!.width!;
+                              const h = activeSession.comfyOverrides!.height!;
+                              handleUpdateOverrides({ width: h, height: w });
+                            }}
+                            className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5"
+                            title="Swap width and height"
+                          >
+                            ⇄
+                          </button>
+                        </div>
+                      </>
+                    )}
                     {/* denoise (1.0以外の場合のみ表示) */}
                     {activeSession.comfyOverrides.denoise !== 1.0 && (
                       <>
@@ -1813,6 +1870,8 @@ export default function Home() {
                     allText={positiveAllText}
                     copyText={positiveCopyText}
                     onSync={handleSyncPositive}
+                    collapsed={collapsedSections.has("input-positive")}
+                    onToggleCollapse={() => toggleSection("input-positive")}
                   />
                   <InputArea
                     label="Negative"
@@ -1821,6 +1880,8 @@ export default function Home() {
                     allText={negativeAllText}
                     copyText={negativeCopyText}
                     onSync={handleSyncNegative}
+                    collapsed={collapsedSections.has("input-negative")}
+                    onToggleCollapse={() => toggleSection("input-negative")}
                   />
                 </div>
 
@@ -1875,6 +1936,10 @@ export default function Home() {
                     negativeGroups={activeSession.negativeGroups}
                     weightMode={weightMode}
                     viewMode={viewMode}
+                    positiveCollapsed={collapsedSections.has("lines-positive")}
+                    negativeCollapsed={collapsedSections.has("lines-negative")}
+                    onTogglePositiveCollapse={() => toggleSection("lines-positive")}
+                    onToggleNegativeCollapse={() => toggleSection("lines-negative")}
                     onToggle={handleToggle}
                     onDelete={handleDelete}
                     onUpdate={handleUpdate}

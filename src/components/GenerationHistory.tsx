@@ -151,6 +151,11 @@ function HistoryEntry({
           cfg:{" "}
           <span className="text-neutral-300 font-mono">{ov.cfg}</span>
         </span>
+        {ov.width && ov.height && (
+          <span className="text-neutral-500">
+            <span className="text-neutral-300 font-mono">{ov.width}×{ov.height}</span>
+          </span>
+        )}
         <div className="flex-1" />
         <button
           onClick={() => setShowParams((p) => !p)}
@@ -211,6 +216,14 @@ function HistoryEntry({
                 {" / "}denoise:{" "}
                 <span className="text-neutral-300 font-mono">
                   {ov.denoise}
+                </span>
+              </>
+            )}
+            {ov.width && ov.height && (
+              <>
+                {" / "}size:{" "}
+                <span className="text-neutral-300 font-mono">
+                  {ov.width}×{ov.height}
                 </span>
               </>
             )}

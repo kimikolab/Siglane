@@ -11,6 +11,10 @@ interface PromptEditorProps {
   negativeGroups?: PromptGroup[];
   weightMode: WeightMode;
   viewMode: "flat" | "outline";
+  positiveCollapsed?: boolean;
+  negativeCollapsed?: boolean;
+  onTogglePositiveCollapse?: () => void;
+  onToggleNegativeCollapse?: () => void;
   onToggle: (type: "positive" | "negative", id: string) => void;
   onDelete: (type: "positive" | "negative", id: string) => void;
   onUpdate: (type: "positive" | "negative", id: string, text: string) => void;
@@ -40,6 +44,10 @@ export default function PromptEditor({
   negativeGroups,
   weightMode,
   viewMode,
+  positiveCollapsed = false,
+  negativeCollapsed = false,
+  onTogglePositiveCollapse,
+  onToggleNegativeCollapse,
   onToggle,
   onDelete,
   onUpdate,
@@ -59,61 +67,99 @@ export default function PromptEditor({
 }: PromptEditorProps) {
   return (
     <div>
-      <PromptLineList
-        sectionLabel="Positive prompt"
-        sectionColor="text-neutral-300"
-        lines={positiveLines}
-        groups={positiveGroups}
-        weightMode={weightMode}
-        viewMode={viewMode}
-        annotations={annotations}
-        onSetAnnotation={onSetAnnotation}
-        onToggle={(id) => onToggle("positive", id)}
-        onDelete={(id) => onDelete("positive", id)}
-        onUpdate={(id, text) => onUpdate("positive", id, text)}
-        onAdd={(line) => onAdd("positive", line)}
-        onDuplicate={(id) => onDuplicate("positive", id)}
-        onReorder={(activeId, overId) =>
-          onReorder("positive", activeId, overId)
-        }
-        onWeightChange={(id, delta) => onWeightChange("positive", id, delta)}
-        onWeightSet={(id, weight) => onWeightSet("positive", id, weight)}
-        onSetGroup={(ids, label) => onSetGroup("positive", ids, label)}
-        onBulkToggle={(ids, enabled) => onBulkToggle("positive", ids, enabled)}
-        onUngroup={(ids) => onUngroup("positive", ids)}
-        onSetLineGroup={(id, label) => onSetLineGroup("positive", id, label)}
-        onReplaceGroup={(gid, label, prompts) => onReplaceGroup("positive", gid, label, prompts)}
-        onReplaceSelection={(ids, label, prompts) => onReplaceSelection("positive", ids, label, prompts)}
-      />
+      {/* Positive section header */}
+      {onTogglePositiveCollapse && (
+        <button
+          onClick={onTogglePositiveCollapse}
+          className="flex items-center gap-1.5 mb-1"
+        >
+          <span className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors">
+            {positiveCollapsed ? "▶" : "▼"}
+          </span>
+          <span className="text-xs uppercase tracking-wider text-neutral-300">
+            Positive prompt
+          </span>
+          <span className="text-[10px] text-neutral-600">
+            ({positiveLines.length})
+          </span>
+        </button>
+      )}
+      {!positiveCollapsed && (
+        <PromptLineList
+          sectionLabel={onTogglePositiveCollapse ? "" : "Positive prompt"}
+          sectionColor="text-neutral-300"
+          lines={positiveLines}
+          groups={positiveGroups}
+          weightMode={weightMode}
+          viewMode={viewMode}
+          annotations={annotations}
+          onSetAnnotation={onSetAnnotation}
+          onToggle={(id) => onToggle("positive", id)}
+          onDelete={(id) => onDelete("positive", id)}
+          onUpdate={(id, text) => onUpdate("positive", id, text)}
+          onAdd={(line) => onAdd("positive", line)}
+          onDuplicate={(id) => onDuplicate("positive", id)}
+          onReorder={(activeId, overId) =>
+            onReorder("positive", activeId, overId)
+          }
+          onWeightChange={(id, delta) => onWeightChange("positive", id, delta)}
+          onWeightSet={(id, weight) => onWeightSet("positive", id, weight)}
+          onSetGroup={(ids, label) => onSetGroup("positive", ids, label)}
+          onBulkToggle={(ids, enabled) => onBulkToggle("positive", ids, enabled)}
+          onUngroup={(ids) => onUngroup("positive", ids)}
+          onSetLineGroup={(id, label) => onSetLineGroup("positive", id, label)}
+          onReplaceGroup={(gid, label, prompts) => onReplaceGroup("positive", gid, label, prompts)}
+          onReplaceSelection={(ids, label, prompts) => onReplaceSelection("positive", ids, label, prompts)}
+        />
+      )}
 
       <div className="mt-4" />
 
-      <PromptLineList
-        sectionLabel="Negative prompt"
-        sectionColor="text-amber-800"
-        lines={negativeLines}
-        groups={negativeGroups}
-        weightMode={weightMode}
-        viewMode={viewMode}
-        annotations={annotations}
-        onSetAnnotation={onSetAnnotation}
-        onToggle={(id) => onToggle("negative", id)}
-        onDelete={(id) => onDelete("negative", id)}
-        onUpdate={(id, text) => onUpdate("negative", id, text)}
-        onAdd={(line) => onAdd("negative", line)}
-        onDuplicate={(id) => onDuplicate("negative", id)}
-        onReorder={(activeId, overId) =>
-          onReorder("negative", activeId, overId)
-        }
-        onWeightChange={(id, delta) => onWeightChange("negative", id, delta)}
-        onWeightSet={(id, weight) => onWeightSet("negative", id, weight)}
-        onSetGroup={(ids, label) => onSetGroup("negative", ids, label)}
-        onBulkToggle={(ids, enabled) => onBulkToggle("negative", ids, enabled)}
-        onUngroup={(ids) => onUngroup("negative", ids)}
-        onSetLineGroup={(id, label) => onSetLineGroup("negative", id, label)}
-        onReplaceGroup={(gid, label, prompts) => onReplaceGroup("negative", gid, label, prompts)}
-        onReplaceSelection={(ids, label, prompts) => onReplaceSelection("negative", ids, label, prompts)}
-      />
+      {/* Negative section header */}
+      {onToggleNegativeCollapse && (
+        <button
+          onClick={onToggleNegativeCollapse}
+          className="flex items-center gap-1.5 mb-1"
+        >
+          <span className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors">
+            {negativeCollapsed ? "▶" : "▼"}
+          </span>
+          <span className="text-xs uppercase tracking-wider text-amber-800">
+            Negative prompt
+          </span>
+          <span className="text-[10px] text-neutral-600">
+            ({negativeLines.length})
+          </span>
+        </button>
+      )}
+      {!negativeCollapsed && (
+        <PromptLineList
+          sectionLabel={onToggleNegativeCollapse ? "" : "Negative prompt"}
+          sectionColor="text-amber-800"
+          lines={negativeLines}
+          groups={negativeGroups}
+          weightMode={weightMode}
+          viewMode={viewMode}
+          annotations={annotations}
+          onSetAnnotation={onSetAnnotation}
+          onToggle={(id) => onToggle("negative", id)}
+          onDelete={(id) => onDelete("negative", id)}
+          onUpdate={(id, text) => onUpdate("negative", id, text)}
+          onAdd={(line) => onAdd("negative", line)}
+          onDuplicate={(id) => onDuplicate("negative", id)}
+          onReorder={(activeId, overId) =>
+            onReorder("negative", activeId, overId)
+          }
+          onWeightChange={(id, delta) => onWeightChange("negative", id, delta)}
+          onWeightSet={(id, weight) => onWeightSet("negative", id, weight)}
+          onSetGroup={(ids, label) => onSetGroup("negative", ids, label)}
+          onBulkToggle={(ids, enabled) => onBulkToggle("negative", ids, enabled)}
+          onUngroup={(ids) => onUngroup("negative", ids)}
+          onSetLineGroup={(id, label) => onSetLineGroup("negative", id, label)}
+          onReplaceGroup={(gid, label, prompts) => onReplaceGroup("negative", gid, label, prompts)}
+          onReplaceSelection={(ids, label, prompts) => onReplaceSelection("negative", ids, label, prompts)}
+        />
+      )}
     </div>
   );
 }

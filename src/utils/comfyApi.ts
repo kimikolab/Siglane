@@ -308,6 +308,7 @@ export function extractOverrides(
 ): ComfyGenerationOverrides {
   const sampler = findSamplerNode(workflow);
   const params = sampler ? extractApiSamplerParams(sampler.node) : {};
+  const size = extractApiImageSize(workflow);
   return {
     seed: "random",
     cfg: params.cfg ?? 7.0,
@@ -315,6 +316,8 @@ export function extractOverrides(
     samplerName: params.samplerName ?? "euler",
     scheduler: params.scheduler ?? "normal",
     denoise: params.denoise ?? 1.0,
+    width: size.width,
+    height: size.height,
   };
 }
 
@@ -337,6 +340,19 @@ export function applyOverrides(
   inputs.sampler_name = overrides.samplerName;
   inputs.scheduler = overrides.scheduler;
   inputs.denoise = overrides.denoise;
+
+  // EmptyLatentImageの解像度をオーバーライド
+  if (overrides.width && overrides.height) {
+    for (const [nodeId, node] of Object.entries(wf)) {
+      if (node.class_type === "EmptyLatentImage") {
+        wf[nodeId] = {
+          ...node,
+          inputs: { ...node.inputs, width: overrides.width, height: overrides.height },
+        };
+        break;
+      }
+    }
+  }
 
   return wf;
 }

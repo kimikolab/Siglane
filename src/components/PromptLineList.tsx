@@ -239,9 +239,11 @@ export default function PromptLineList({
             )}
           </svg>
         </button>
-        <span className={`text-xs uppercase tracking-wider ${sectionColor}`}>
-          {sectionLabel}
-        </span>
+        {sectionLabel && (
+          <span className={`text-xs uppercase tracking-wider ${sectionColor}`}>
+            {sectionLabel}
+          </span>
+        )}
         <div className="flex-1 h-px bg-neutral-700" />
       </div>
 

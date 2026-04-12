@@ -8,19 +8,23 @@ import { useState, useEffect } from "react";
 interface InputAreaProps {
   label: string;
   labelColor?: string;
-  rows?: number; // ← 追加
-  allText: string; // 全行のカンマ区切り（グリッドから生成）
-  copyText: string; // ON行のみのカンマ区切り（コピー用）
-  onSync: (text: string) => void; // テキスト→グリッド同期（blur時）
+  rows?: number;
+  allText: string;
+  copyText: string;
+  onSync: (text: string) => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export default function InputArea({
   label,
   labelColor = "text-neutral-300",
-  rows = 3, // ← 追加（デフォルト3）
+  rows = 3,
   allText,
   copyText,
   onSync,
+  collapsed = false,
+  onToggleCollapse,
 }: InputAreaProps) {
   // ローカル状態: テキストエリアの編集中の値
   // WPFでいうと: TextBoxのTextプロパティ（ローカルで持ちつつ、外部からも更新される）
@@ -44,9 +48,19 @@ export default function InputArea({
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <label className={`text-xs uppercase tracking-wider ${labelColor}`}>
-          {label}
-        </label>
+        <div className="flex items-center gap-1.5">
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors"
+            >
+              {collapsed ? "▶" : "▼"}
+            </button>
+          )}
+          <label className={`text-xs uppercase tracking-wider ${labelColor}`}>
+            {label}
+          </label>
+        </div>
         <button
           onClick={handleCopy}
           className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
@@ -54,18 +68,20 @@ export default function InputArea({
           {copied ? "Copied!" : "Copy"}
         </button>
       </div>
-      <textarea
-        value={localText}
-        onChange={(e) => setLocalText(e.target.value)}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => {
-          setIsFocused(false);
-          onSync(localText);
-        }}
-        className="w-full bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-sm font-mono text-neutral-300 placeholder-neutral-600 resize-none focus:outline-none focus:border-neutral-500"
-        rows={rows}
-        placeholder={`Paste or type ${label.toLowerCase()} prompt...`}
-      />
+      {!collapsed && (
+        <textarea
+          value={localText}
+          onChange={(e) => setLocalText(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => {
+            setIsFocused(false);
+            onSync(localText);
+          }}
+          className="w-full bg-neutral-800 border border-neutral-700 rounded-lg p-3 text-sm font-mono text-neutral-300 placeholder-neutral-600 resize-none focus:outline-none focus:border-neutral-500"
+          rows={rows}
+          placeholder={`Paste or type ${label.toLowerCase()} prompt...`}
+        />
+      )}
     </div>
   );
 }
