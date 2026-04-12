@@ -77,6 +77,7 @@ export interface GenerationHistoryEntry {
   overrides: ComfyGenerationOverrides;
   imageUrls: string[];       // ComfyUI /view?filename=... URLs
   createdAt: string;
+  isFavorite?: boolean;
 }
 
 // Siglane上で編集可能な生成パラメータ

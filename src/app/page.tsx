@@ -2039,6 +2039,14 @@ export default function Home() {
                     generationHistory: [],
                   }));
                 }}
+                onToggleFavorite={(entryId) => {
+                  updateActiveSession((s) => ({
+                    ...s,
+                    generationHistory: (s.generationHistory ?? []).map((e) =>
+                      e.id === entryId ? { ...e, isFavorite: !e.isFavorite } : e,
+                    ),
+                  }));
+                }}
               />
             ) : (
               <div className="text-xs text-neutral-600 text-center mt-8">
