@@ -28,6 +28,7 @@ import PromptEditor from "@/components/PromptEditor";
 import MemoBox from "@/components/MemoBox";
 import GenerationHistory from "@/components/GenerationHistory";
 import DictionaryView from "@/components/DictionaryView";
+import DictionaryBrowser from "@/components/DictionaryBrowser";
 import SessionSidebar from "@/components/SessionSidebar";
 import { WeightMode } from "@/components/PromptLineItem";
 import {
@@ -159,6 +160,7 @@ export default function Home() {
   const [weightMode, setWeightMode] = useState<WeightMode>("combined");
   const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
   const [rightPanelTab, setRightPanelTab] = useState<"history" | "dictionary">("history");
+  const [isDictionaryFullView, setIsDictionaryFullView] = useState(false);
 
   // --- プロンプト注釈 ---
   const [annotations, setAnnotations] = useState<Record<string, string>>({});
@@ -289,6 +291,7 @@ export default function Home() {
   const handleSelectSession = (id: string) => {
     setAppState((prev) => ({ ...prev, activeSessionId: id }));
     setRightPanelTab("history");
+    setIsDictionaryFullView(false);
   };
 
   const handleDuplicateSession = (id: string) => {
@@ -952,6 +955,19 @@ export default function Home() {
     [],
   );
 
+  const handleDictBrowserAddTag = useCallback(
+    (type: "positive" | "negative", tag: string) => {
+      if (!activeSession) return;
+      const line = createPromptLine(tag);
+      const key = type === "positive" ? "positiveLines" : "negativeLines";
+      updateActiveSession((s) => ({
+        ...s,
+        [key]: [...(s[key] as PromptLine[]), line],
+      }));
+    },
+    [activeSession, updateActiveSession],
+  );
+
   const isTemplateActive = activeSession?.isTemplate ?? false;
 
   // --- ComfyUI API連携 ---
@@ -1271,7 +1287,7 @@ export default function Home() {
         onNewFolder={handleNewFolder}
         onRenameFolder={handleRenameFolder}
         onDeleteFolder={handleDeleteFolder}
-        isDictionaryActive={rightPanelTab === "dictionary"}
+        isDictionaryActive={rightPanelTab === "dictionary" || isDictionaryFullView}
         onOpenDictionary={() => setRightPanelTab("dictionary")}
       />
 
@@ -1280,6 +1296,29 @@ export default function Home() {
       {/* エディタカラム */}
       <div className="flex-1 overflow-hidden">
         <div className="h-full flex flex-col p-6 pb-0">
+          {isDictionaryFullView ? (
+            <>
+              <div className="flex items-center gap-3 mb-4 flex-shrink-0">
+                <button
+                  onClick={() => setIsDictionaryFullView(false)}
+                  className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                >
+                  ← Back to editor
+                </button>
+              </div>
+              <DictionaryView
+                annotations={annotations}
+                defaultGroups={defaultGroups}
+                onUpdateAnnotation={handleDictUpdateAnnotation}
+                onDeleteAnnotation={handleDictDeleteAnnotation}
+                onUpdateGroup={handleDictUpdateGroup}
+                onOpenBulkNotes={(json) => {
+                  setBulkAnnotationText(json);
+                  setShowBulkAnnotation(true);
+                }}
+              />
+            </>
+          ) : (
           <>
           {/* ステータスバー */}
           <div className="flex items-start justify-between mb-5 flex-shrink-0">
@@ -1820,6 +1859,7 @@ export default function Home() {
           )}
           </div>
           </>
+          )}
         </div>
       </div>
 
@@ -1875,18 +1915,22 @@ export default function Home() {
             )}
           </div>
         ) : (
-          <div className="flex-1 min-h-0 flex flex-col px-3">
-            <DictionaryView
-              annotations={annotations}
-              defaultGroups={defaultGroups}
-              onUpdateAnnotation={handleDictUpdateAnnotation}
-              onDeleteAnnotation={handleDictDeleteAnnotation}
-              onUpdateGroup={handleDictUpdateGroup}
-              onOpenBulkNotes={(json) => {
-                setBulkAnnotationText(json);
-                setShowBulkAnnotation(true);
-              }}
-            />
+          <div className="flex-1 min-h-0 flex flex-col px-3 pb-3">
+            {activeSession ? (
+              <DictionaryBrowser
+                annotations={annotations}
+                defaultGroups={defaultGroups}
+                negativeTags={negativeTags}
+                positiveLines={activeSession.positiveLines}
+                negativeLines={activeSession.negativeLines}
+                onAddTag={handleDictBrowserAddTag}
+                onOpenManage={() => setIsDictionaryFullView(true)}
+              />
+            ) : (
+              <div className="text-xs text-neutral-600 text-center mt-8">
+                No session selected
+              </div>
+            )}
           </div>
         )}
       </div>
