@@ -213,7 +213,9 @@ function CategoryNode({
         <span className="text-[10px] text-neutral-600 w-3 flex-shrink-0">
           {isCollapsed ? "▶" : "▼"}
         </span>
-        <span className="text-[11px] text-neutral-400 font-medium truncate">
+        <span className={`text-[11px] font-medium truncate ${
+          depth === 0 ? "text-sky-400/80" : "text-neutral-400"
+        }`}>
           {node.label}
         </span>
         <span className="text-[10px] text-neutral-600 flex-shrink-0">

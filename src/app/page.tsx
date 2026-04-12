@@ -1917,7 +1917,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 右パネル */}
+      {/* 右パネル (管理画面表示中は非表示) */}
+      {!isDictionaryFullView && (
       <div className="w-[340px] flex-shrink-0 border-l border-neutral-800 flex flex-col h-full bg-neutral-900">
         {/* タブバー */}
         <div className="flex items-center gap-1 px-3 pt-3 pb-2 flex-shrink-0">
@@ -2009,6 +2010,7 @@ export default function Home() {
           </div>
         )}
       </div>
+      )}
       </div>
 
       {/* ヘルプオーバーレイ */}
