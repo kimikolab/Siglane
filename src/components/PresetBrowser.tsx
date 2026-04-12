@@ -11,59 +11,97 @@ interface PresetBrowserProps {
   onOpenManage: () => void;
 }
 
+// --- Tree structure ---
+
+interface TreeNode {
+  label: string;
+  fullPath: string;
+  children: TreeNode[];
+  entries: DictionaryEntry[];
+}
+
+function buildTree(entries: DictionaryEntry[]): TreeNode {
+  const root: TreeNode = { label: "", fullPath: "", children: [], entries: [] };
+
+  for (const entry of entries) {
+    const segments = entry.category.split("/").filter((s) => s.trim());
+    let node = root;
+    let path = "";
+    for (const seg of segments) {
+      path = path ? `${path}/${seg}` : seg;
+      let child = node.children.find((c) => c.label === seg);
+      if (!child) {
+        child = { label: seg, fullPath: path, children: [], entries: [] };
+        node.children.push(child);
+      }
+      node = child;
+    }
+    node.entries.push(entry);
+  }
+
+  const sortChildren = (node: TreeNode) => {
+    node.children.sort((a, b) => a.label.localeCompare(b.label));
+    node.entries.sort((a, b) => a.label.localeCompare(b.label));
+    for (const child of node.children) sortChildren(child);
+  };
+  sortChildren(root);
+
+  return root;
+}
+
+function countEntries(node: TreeNode): number {
+  let count = node.entries.length;
+  for (const child of node.children) count += countEntries(child);
+  return count;
+}
+
+// --- Component ---
+
 export default function PresetBrowser({
   onAddPreset,
   onOpenManage,
 }: PresetBrowserProps) {
   const [allEntries, setAllEntries] = useState<DictionaryEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
+  const [expandedPresetId, setExpandedPresetId] = useState<string | null>(null);
 
-  // Load presets from localStorage
   useEffect(() => {
     setAllEntries(loadDictionary());
   }, []);
 
-  // Re-load when tab becomes visible (storage may have changed)
   useEffect(() => {
     const onFocus = () => setAllEntries(loadDictionary());
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
-  // Available categories
-  const categories = useMemo(() => {
-    const cats = new Set<string>();
-    for (const e of allEntries) {
-      if (e.category) {
-        // Top-level category (before /)
-        const top = e.category.split("/")[0];
-        cats.add(top);
-      }
-    }
-    return Array.from(cats).sort();
-  }, [allEntries]);
-
   // Filter
   const filtered = useMemo(() => {
-    let result = allEntries;
-    if (categoryFilter !== "all") {
-      result = result.filter(
-        (e) => e.category === categoryFilter || e.category.startsWith(categoryFilter + "/"),
-      );
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (e) =>
-          e.label.toLowerCase().includes(q) ||
-          e.category.toLowerCase().includes(q) ||
-          e.prompts.some((p) => p.toLowerCase().includes(q)),
-      );
-    }
-    return result.sort((a, b) => a.label.localeCompare(b.label));
-  }, [allEntries, categoryFilter, searchQuery]);
+    if (!searchQuery.trim()) return allEntries;
+    const q = searchQuery.toLowerCase();
+    return allEntries.filter(
+      (e) =>
+        e.label.toLowerCase().includes(q) ||
+        e.category.toLowerCase().includes(q) ||
+        e.prompts.some((p) => p.toLowerCase().includes(q)),
+    );
+  }, [allEntries, searchQuery]);
+
+  // Build tree from filtered entries
+  const tree = useMemo(() => buildTree(filtered), [filtered]);
+
+  const toggleCollapse = useCallback((path: string) => {
+    setCollapsedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
 
   const handleAdd = useCallback(
     (entry: DictionaryEntry, shiftKey: boolean) => {
@@ -75,7 +113,7 @@ export default function PresetBrowser({
 
   return (
     <div className="flex flex-col gap-2 h-full">
-      {/* Search + filter */}
+      {/* Search */}
       <div className="flex flex-col gap-1.5 flex-shrink-0">
         <input
           type="text"
@@ -84,87 +122,47 @@ export default function PresetBrowser({
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full bg-neutral-800 border border-neutral-700 rounded px-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-neutral-500"
         />
-        <div className="flex items-center gap-2">
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="flex-1 min-w-0 bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-[11px] text-neutral-300 focus:outline-none focus:border-neutral-500"
-          >
-            <option value="all">All categories</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <span className="text-[10px] text-neutral-600 whitespace-nowrap">
-            {filtered.length}/{allEntries.length}
-          </span>
-        </div>
+        <span className="text-[10px] text-neutral-600">
+          {filtered.length}/{allEntries.length} presets
+        </span>
       </div>
 
-      {/* Preset list */}
+      {/* Tree list */}
       <div className="flex-1 overflow-y-auto sidebar-scroll min-h-0">
         {filtered.length === 0 ? (
           <p className="text-xs text-neutral-600 text-center py-6">
             {searchQuery ? "No matching presets" : "No presets registered"}
           </p>
         ) : (
-          <div className="flex flex-col gap-0.5">
-            {filtered.map((entry) => {
-              const isExpanded = expandedId === entry.id;
-              return (
-                <div key={entry.id} className="rounded hover:bg-neutral-800/60 transition-colors">
-                  {/* Header row */}
-                  <div className="flex items-center gap-1 px-2 py-1.5">
-                    {/* Expand toggle */}
-                    <button
-                      onClick={() => setExpandedId(isExpanded ? null : entry.id)}
-                      className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors w-3 flex-shrink-0"
-                    >
-                      {isExpanded ? "▼" : "▶"}
-                    </button>
-                    {/* Label + category */}
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs text-neutral-200 truncate block">
-                        {entry.label}
-                      </span>
-                      <span className="text-[10px] text-neutral-600 truncate block">
-                        {entry.category} · {entry.prompts.length} tags
-                      </span>
-                    </div>
-                    {/* Add button */}
-                    <button
-                      onClick={(e) => handleAdd(entry, e.shiftKey)}
-                      className="text-neutral-600 hover:text-sky-400 transition-colors text-xs flex-shrink-0 px-1"
-                      title="Click: add to Positive / Shift+click: add to Negative"
-                    >
-                      +
-                    </button>
-                  </div>
-                  {/* Expanded: show prompts */}
-                  {isExpanded && (
-                    <div className="px-2 pb-2 ml-4">
-                      <div className="flex flex-wrap gap-1">
-                        {entry.prompts.map((p, i) => (
-                          <span
-                            key={i}
-                            className="text-[10px] bg-neutral-800 text-neutral-400 px-1.5 py-0.5 rounded font-mono"
-                          >
-                            {p}
-                          </span>
-                        ))}
-                      </div>
-                      {entry.note && (
-                        <p className="text-[10px] text-neutral-600 mt-1">
-                          {entry.note}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className="flex flex-col">
+            {tree.children.map((child) => (
+              <CategoryNode
+                key={child.fullPath}
+                node={child}
+                depth={0}
+                collapsedPaths={collapsedPaths}
+                expandedPresetId={expandedPresetId}
+                onToggleCollapse={toggleCollapse}
+                onTogglePreset={(id) =>
+                  setExpandedPresetId(expandedPresetId === id ? null : id)
+                }
+                onAdd={handleAdd}
+              />
+            ))}
+            {tree.entries.map((entry) => (
+              <PresetItem
+                key={entry.id}
+                entry={entry}
+                depth={0}
+                isExpanded={expandedPresetId === entry.id}
+                onToggleExpand={() =>
+                  setExpandedPresetId(
+                    expandedPresetId === entry.id ? null : entry.id,
+                  )
+                }
+                onAdd={handleAdd}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -178,6 +176,144 @@ export default function PresetBrowser({
           Manage presets →
         </button>
       </div>
+    </div>
+  );
+}
+
+// --- Category node (folder) ---
+
+function CategoryNode({
+  node,
+  depth,
+  collapsedPaths,
+  expandedPresetId,
+  onToggleCollapse,
+  onTogglePreset,
+  onAdd,
+}: {
+  node: TreeNode;
+  depth: number;
+  collapsedPaths: Set<string>;
+  expandedPresetId: string | null;
+  onToggleCollapse: (path: string) => void;
+  onTogglePreset: (id: string) => void;
+  onAdd: (entry: DictionaryEntry, shiftKey: boolean) => void;
+}) {
+  const isCollapsed = collapsedPaths.has(node.fullPath);
+  const total = countEntries(node);
+
+  return (
+    <div>
+      {/* Category header */}
+      <button
+        onClick={() => onToggleCollapse(node.fullPath)}
+        className="flex items-center gap-1 w-full text-left px-1 py-1 hover:bg-neutral-800/40 rounded transition-colors"
+        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+      >
+        <span className="text-[10px] text-neutral-600 w-3 flex-shrink-0">
+          {isCollapsed ? "▶" : "▼"}
+        </span>
+        <span className="text-[11px] text-neutral-400 font-medium truncate">
+          {node.label}
+        </span>
+        <span className="text-[10px] text-neutral-600 flex-shrink-0">
+          {total}
+        </span>
+      </button>
+
+      {/* Children */}
+      {!isCollapsed && (
+        <>
+          {node.children.map((child) => (
+            <CategoryNode
+              key={child.fullPath}
+              node={child}
+              depth={depth + 1}
+              collapsedPaths={collapsedPaths}
+              expandedPresetId={expandedPresetId}
+              onToggleCollapse={onToggleCollapse}
+              onTogglePreset={onTogglePreset}
+              onAdd={onAdd}
+            />
+          ))}
+          {node.entries.map((entry) => (
+            <PresetItem
+              key={entry.id}
+              entry={entry}
+              depth={depth + 1}
+              isExpanded={expandedPresetId === entry.id}
+              onToggleExpand={() => onTogglePreset(entry.id)}
+              onAdd={onAdd}
+            />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// --- Preset item ---
+
+function PresetItem({
+  entry,
+  depth,
+  isExpanded,
+  onToggleExpand,
+  onAdd,
+}: {
+  entry: DictionaryEntry;
+  depth: number;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  onAdd: (entry: DictionaryEntry, shiftKey: boolean) => void;
+}) {
+  return (
+    <div
+      className="rounded hover:bg-neutral-800/60 transition-colors"
+      style={{ paddingLeft: `${depth * 12 + 4}px` }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-1 px-1 py-1.5">
+        <button
+          onClick={onToggleExpand}
+          className="text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors w-3 flex-shrink-0"
+        >
+          {isExpanded ? "▼" : "▶"}
+        </button>
+        <div className="flex-1 min-w-0">
+          <span className="text-xs text-neutral-200 truncate block">
+            {entry.label}
+          </span>
+          <span className="text-[10px] text-neutral-600">
+            {entry.prompts.length} tags
+          </span>
+        </div>
+        <button
+          onClick={(e) => onAdd(entry, e.shiftKey)}
+          className="text-neutral-600 hover:text-sky-400 transition-colors text-xs flex-shrink-0 px-1"
+          title="Click: add to Positive / Shift+click: add to Negative"
+        >
+          +
+        </button>
+      </div>
+      {/* Expanded tags */}
+      {isExpanded && (
+        <div className="px-1 pb-2" style={{ marginLeft: "16px" }}>
+          <div className="flex flex-wrap gap-1">
+            {entry.prompts.map((p, i) => (
+              <span
+                key={i}
+                className="text-[10px] bg-neutral-800 text-neutral-400 px-1.5 py-0.5 rounded font-mono"
+              >
+                {p}
+              </span>
+            ))}
+          </div>
+          {entry.note && (
+            <p className="text-[10px] text-neutral-600 mt-1">{entry.note}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -996,21 +996,21 @@ export default function Home() {
       const groupsKey = type === "positive" ? "positiveGroups" : "negativeGroups";
 
       updateActiveSession((s) => {
-        const existingLines = [...(s[linesKey] as PromptLine[])];
-        const groups = [...(s[groupsKey] ?? [])];
+        const existingLines = s[linesKey] as PromptLine[];
+        const groups: PromptGroup[] = [...(s[groupsKey] ?? [])];
 
         // プリセットのカテゴリをグループとして使用
-        let group = groups.find((g) => g.label === groupLabel);
-        if (!group) {
-          group = { id: crypto.randomUUID(), label: groupLabel, order: groups.length };
-          groups.push(group);
+        let existingGroup = groups.find((g) => g.label === groupLabel);
+        if (!existingGroup) {
+          existingGroup = { id: crypto.randomUUID(), label: groupLabel, order: groups.length };
+          groups.push(existingGroup);
         }
+        const groupId = existingGroup.id;
 
-        const newLines = prompts.map((p) => {
-          const line = createPromptLine(p);
-          line.groupId = group.id;
-          return line;
-        });
+        const newLines: PromptLine[] = prompts.map((p) => ({
+          ...createPromptLine(p),
+          groupId,
+        }));
 
         return {
           ...s,
@@ -1342,7 +1342,7 @@ export default function Home() {
         onRenameFolder={handleRenameFolder}
         onDeleteFolder={handleDeleteFolder}
         isDictionaryActive={isDictionaryFullView}
-        onOpenDictionary={() => setRightPanelTab("dictionary")}
+        onOpenDictionary={() => setIsDictionaryFullView(true)}
       />
 
       {/* メインエリア: エディタ + 右パネル */}
