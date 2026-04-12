@@ -158,7 +158,7 @@ export default function Home() {
   const [headerRenameValue, setHeaderRenameValue] = useState("");
   const [weightMode, setWeightMode] = useState<WeightMode>("combined");
   const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
-  const [isDictionaryView, setIsDictionaryView] = useState(false);
+  const [rightPanelTab, setRightPanelTab] = useState<"history" | "dictionary">("history");
 
   // --- プロンプト注釈 ---
   const [annotations, setAnnotations] = useState<Record<string, string>>({});
@@ -288,7 +288,7 @@ export default function Home() {
 
   const handleSelectSession = (id: string) => {
     setAppState((prev) => ({ ...prev, activeSessionId: id }));
-    setIsDictionaryView(false);
+    setRightPanelTab("history");
   };
 
   const handleDuplicateSession = (id: string) => {
@@ -1271,26 +1271,15 @@ export default function Home() {
         onNewFolder={handleNewFolder}
         onRenameFolder={handleRenameFolder}
         onDeleteFolder={handleDeleteFolder}
-        isDictionaryActive={isDictionaryView}
-        onOpenDictionary={() => setIsDictionaryView(true)}
+        isDictionaryActive={rightPanelTab === "dictionary"}
+        onOpenDictionary={() => setRightPanelTab("dictionary")}
       />
 
-      {/* メインエディタ */}
+      {/* メインエリア: エディタ + 右パネル */}
+      <div className="flex-1 overflow-hidden flex">
+      {/* エディタカラム */}
       <div className="flex-1 overflow-hidden">
-        <div className="max-w-4xl mx-auto h-full flex flex-col p-6 pb-0">
-          {isDictionaryView ? (
-            <DictionaryView
-              annotations={annotations}
-              defaultGroups={defaultGroups}
-              onUpdateAnnotation={handleDictUpdateAnnotation}
-              onDeleteAnnotation={handleDictDeleteAnnotation}
-              onUpdateGroup={handleDictUpdateGroup}
-              onOpenBulkNotes={(json) => {
-                setBulkAnnotationText(json);
-                setShowBulkAnnotation(true);
-              }}
-            />
-          ) : (
+        <div className="h-full flex flex-col p-6 pb-0">
           <>
           {/* ステータスバー */}
           <div className="flex items-start justify-between mb-5 flex-shrink-0">
@@ -1815,16 +1804,6 @@ export default function Home() {
                   onMemoChange={handleMemoChange}
                 />
 
-                <GenerationHistory
-                  entries={activeSession.generationHistory ?? []}
-                  comfyConnected={!!getActiveConnection(comfySettings)}
-                  onClear={() => {
-                    updateActiveSession((s) => ({
-                      ...s,
-                      generationHistory: [],
-                    }));
-                  }}
-                />
               </div>
 
               {isTemplateActive && (
@@ -1841,8 +1820,76 @@ export default function Home() {
           )}
           </div>
           </>
-          )}
         </div>
+      </div>
+
+      {/* 右パネル */}
+      <div className="w-[340px] flex-shrink-0 border-l border-neutral-800 flex flex-col h-full bg-neutral-900">
+        {/* タブバー */}
+        <div className="flex items-center gap-1 px-3 pt-3 pb-2 flex-shrink-0">
+          <button
+            onClick={() => setRightPanelTab("history")}
+            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+              rightPanelTab === "history"
+                ? "bg-neutral-700 text-neutral-200"
+                : "text-neutral-500 hover:text-neutral-300"
+            }`}
+          >
+            History
+            {activeSession && (activeSession.generationHistory?.length ?? 0) > 0 && (
+              <span className="ml-1.5 text-[10px] text-neutral-500">
+                {activeSession.generationHistory!.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setRightPanelTab("dictionary")}
+            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+              rightPanelTab === "dictionary"
+                ? "bg-neutral-700 text-neutral-200"
+                : "text-neutral-500 hover:text-neutral-300"
+            }`}
+          >
+            Dictionary
+          </button>
+        </div>
+
+        {/* タブコンテンツ */}
+        {rightPanelTab === "history" ? (
+          <div className="flex-1 overflow-y-auto sidebar-scroll px-3 pb-4">
+            {activeSession ? (
+              <GenerationHistory
+                entries={activeSession.generationHistory ?? []}
+                comfyConnected={!!getActiveConnection(comfySettings)}
+                onClear={() => {
+                  updateActiveSession((s) => ({
+                    ...s,
+                    generationHistory: [],
+                  }));
+                }}
+              />
+            ) : (
+              <div className="text-xs text-neutral-600 text-center mt-8">
+                No session selected
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0 flex flex-col px-3">
+            <DictionaryView
+              annotations={annotations}
+              defaultGroups={defaultGroups}
+              onUpdateAnnotation={handleDictUpdateAnnotation}
+              onDeleteAnnotation={handleDictDeleteAnnotation}
+              onUpdateGroup={handleDictUpdateGroup}
+              onOpenBulkNotes={(json) => {
+                setBulkAnnotationText(json);
+                setShowBulkAnnotation(true);
+              }}
+            />
+          </div>
+        )}
+      </div>
       </div>
 
       {/* ヘルプオーバーレイ */}

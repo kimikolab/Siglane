@@ -28,10 +28,20 @@ export default function GenerationHistory({
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxUrl, closeLightbox]);
 
-  if (entries.length === 0) return null;
+  if (entries.length === 0) {
+    return (
+      <div className="text-xs text-neutral-600 text-center mt-8">
+        No generation history yet.
+        <br />
+        <span className="text-neutral-700">
+          Import a workflow and hit Generate to start.
+        </span>
+      </div>
+    );
+  }
 
   return (
-    <div className="mt-4">
+    <div>
       <button
         onClick={() => setExpanded((p) => !p)}
         className="flex items-center gap-2 mb-2 group"
