@@ -3,6 +3,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Session, Folder } from "@/types";
+import {
+  buildExportData,
+  downloadExport,
+  readImportFile,
+  validateImportData,
+  applyImportData,
+  type SiglaneExportData,
+} from "@/utils/exportImport";
 
 interface SessionSidebarProps {
   sessions: Session[];
@@ -23,6 +31,7 @@ interface SessionSidebarProps {
   onRenameFolder: (id: string, newLabel: string) => void;
   onDeleteFolder: (id: string) => void;
   onOpenDictionary?: () => void;
+  onImportData?: (data: SiglaneExportData) => void;
 }
 
 // --- コンテキストメニュー（Portal描画） ---
@@ -175,6 +184,7 @@ export default function SessionSidebar({
   onDeleteFolder,
   isDictionaryActive,
   onOpenDictionary,
+  onImportData,
 }: SessionSidebarProps) {
   const [menuOpen, setMenuOpen] = useState<{
     type: "session" | "folder";
@@ -185,8 +195,49 @@ export default function SessionSidebar({
   const [renameValue, setRenameValue] = useState("");
   const [renamingType, setRenamingType] = useState<"session" | "folder">("session");
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [importConfirm, setImportConfirm] = useState<{
+    data: SiglaneExportData;
+    sessionCount: number;
+    folderCount: number;
+  } | null>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const closeMenu = useCallback(() => setMenuOpen(null), []);
+
+  // --- エクスポート/インポート ---
+  const handleExport = useCallback(() => {
+    const data = buildExportData();
+    downloadExport(data);
+  }, []);
+
+  const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // input をリセット（同じファイルを再選択できるように）
+    e.target.value = "";
+    try {
+      const raw = await readImportFile(file);
+      const result = validateImportData(raw);
+      if (!result.success) {
+        alert(`Import failed: ${result.error}`);
+        return;
+      }
+      setImportConfirm({
+        data: result.data,
+        sessionCount: result.sessionCount,
+        folderCount: result.folderCount,
+      });
+    } catch {
+      alert("Failed to read file");
+    }
+  }, []);
+
+  const confirmImport = useCallback(() => {
+    if (!importConfirm || !onImportData) return;
+    applyImportData(importConfirm.data);
+    onImportData(importConfirm.data);
+    setImportConfirm(null);
+  }, [importConfirm, onImportData]);
 
   const toggleFolderCollapse = (folderId: string) => {
     setCollapsedFolders((prev) => {
@@ -794,7 +845,86 @@ export default function SessionSidebar({
             </div>
           )}
         </div>
+
+        {/* Export / Import フッター */}
+        {onImportData && (
+          <div className="flex-shrink-0 border-t border-neutral-800 px-4 py-3">
+            <div className="flex gap-2">
+              <button
+                onClick={handleExport}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded-md py-1.5 transition-colors"
+                title="Export all data"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 10v3h10v-3" />
+                  <path d="M8 2v8M5 7l3 3 3-3" />
+                </svg>
+                Export
+              </button>
+              <button
+                onClick={() => importFileRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded-md py-1.5 transition-colors"
+                title="Import data from file"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 10v3h10v-3" />
+                  <path d="M8 10V2M5 5l3-3 3 3" />
+                </svg>
+                Import
+              </button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".json"
+                onChange={handleImportFile}
+                className="hidden"
+              />
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* インポート確認ダイアログ */}
+      {importConfirm && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setImportConfirm(null)} />
+          <div className="relative bg-neutral-900 border border-neutral-700 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+            <h3 className="text-base font-semibold text-neutral-100 mb-3">
+              Import Data
+            </h3>
+            <p className="text-sm text-neutral-400 mb-1">
+              This will replace all existing data:
+            </p>
+            <div className="text-sm text-neutral-300 bg-neutral-800/60 rounded-lg p-3 mb-1">
+              <div>{importConfirm.sessionCount} session{importConfirm.sessionCount !== 1 ? "s" : ""}</div>
+              <div>{importConfirm.folderCount} folder{importConfirm.folderCount !== 1 ? "s" : ""}</div>
+              {importConfirm.data.exportedAt && (
+                <div className="text-neutral-500 text-xs mt-1">
+                  Exported: {new Date(importConfirm.data.exportedAt).toLocaleString()}
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-amber-500/80 mb-4">
+              Current sessions, dictionary, and annotations will be overwritten.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setImportConfirm(null)}
+                className="px-4 py-1.5 text-sm text-neutral-400 hover:text-neutral-200 rounded-lg hover:bg-neutral-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmImport}
+                className="px-4 py-1.5 text-sm text-neutral-100 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
+              >
+                Import
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {menuOpen && menuActions.length > 0 && (
         <ContextMenu

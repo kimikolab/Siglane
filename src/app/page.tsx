@@ -91,6 +91,7 @@ import {
   loadNegativeTags,
   saveNegativeTags,
 } from "@/utils/negativeTags";
+import { type SiglaneExportData } from "@/utils/exportImport";
 
 const STORAGE_KEY = "siglane-app-state";
 const LEGACY_STORAGE_KEY = "siglane-state";
@@ -422,6 +423,16 @@ export default function Home() {
       ),
     }));
   };
+
+  // --- エクスポート/インポート ---
+  const handleImportData = useCallback((data: SiglaneExportData) => {
+    // appState を置き換え（自動保存がlocalStorageに書き込む）
+    setAppState(data.appState);
+    // annotations等のReact stateもリロード
+    setAnnotations(data.annotations ?? {});
+    setDefaultGroups((data.defaultGroups ?? {}) as DefaultGroups);
+    setNegativeTags((data.negativeTags ?? {}) as NegativeTags);
+  }, []);
 
   // --- ComfyUI連携 ---
   const comfyFileRef = useRef<HTMLInputElement>(null);
@@ -1355,6 +1366,7 @@ export default function Home() {
         onDeleteFolder={handleDeleteFolder}
         isDictionaryActive={isDictionaryFullView}
         onOpenDictionary={() => setIsDictionaryFullView(true)}
+        onImportData={handleImportData}
       />
 
       {/* メインエリア: エディタ + 右パネル */}
