@@ -521,6 +521,11 @@ export default function PromptLineList({
                           weightMode={weightMode}
                           isSelectMode={isSelectMode}
                           isSelected={selectedIds.has(line.id)}
+                          groupLabel={
+                            line.groupId
+                              ? groups?.find((g) => g.id === line.groupId)?.label
+                              : undefined
+                          }
                           isDragEnabled={false}
                           onToggle={onToggle}
                           onDelete={onDelete}
