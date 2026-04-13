@@ -13,6 +13,9 @@ interface PromptEditorProps {
   viewMode: "flat" | "outline";
   positiveCollapsed?: boolean;
   negativeCollapsed?: boolean;
+  isSelectMode: boolean;
+  selectedIds: Set<string>;
+  onSelectedIdsChange: (updater: (prev: Set<string>) => Set<string>) => void;
   onTogglePositiveCollapse?: () => void;
   onToggleNegativeCollapse?: () => void;
   onToggle: (type: "positive" | "negative", id: string) => void;
@@ -27,12 +30,9 @@ interface PromptEditorProps {
   ) => void;
   onWeightChange: (type: "positive" | "negative", id: string, delta: number) => void;
   onWeightSet: (type: "positive" | "negative", id: string, weight: number) => void;
-  onSetGroup: (type: "positive" | "negative", lineIds: string[], groupLabel: string) => void;
   onBulkToggle: (type: "positive" | "negative", lineIds: string[], enabled: boolean) => void;
-  onUngroup: (type: "positive" | "negative", lineIds: string[]) => void;
   onSetLineGroup: (type: "positive" | "negative", id: string, groupLabel: string | null) => void;
   onReplaceGroup: (type: "positive" | "negative", groupId: string, groupLabel: string, newPrompts: string[]) => void;
-  onReplaceSelection: (type: "positive" | "negative", selectedIds: string[], groupLabel: string, newPrompts: string[]) => void;
   annotations: Record<string, string>;
   onSetAnnotation: (text: string, description: string) => void;
 }
@@ -46,6 +46,9 @@ export default function PromptEditor({
   viewMode,
   positiveCollapsed = false,
   negativeCollapsed = false,
+  isSelectMode,
+  selectedIds,
+  onSelectedIdsChange,
   onTogglePositiveCollapse,
   onToggleNegativeCollapse,
   onToggle,
@@ -56,12 +59,9 @@ export default function PromptEditor({
   onReorder,
   onWeightChange,
   onWeightSet,
-  onSetGroup,
   onBulkToggle,
-  onUngroup,
   onSetLineGroup,
   onReplaceGroup,
-  onReplaceSelection,
   annotations,
   onSetAnnotation,
 }: PromptEditorProps) {
@@ -92,6 +92,9 @@ export default function PromptEditor({
           groups={positiveGroups}
           weightMode={weightMode}
           viewMode={viewMode}
+          isSelectMode={isSelectMode}
+          selectedIds={selectedIds}
+          onSelectedIdsChange={onSelectedIdsChange}
           annotations={annotations}
           onSetAnnotation={onSetAnnotation}
           onToggle={(id) => onToggle("positive", id)}
@@ -104,12 +107,9 @@ export default function PromptEditor({
           }
           onWeightChange={(id, delta) => onWeightChange("positive", id, delta)}
           onWeightSet={(id, weight) => onWeightSet("positive", id, weight)}
-          onSetGroup={(ids, label) => onSetGroup("positive", ids, label)}
           onBulkToggle={(ids, enabled) => onBulkToggle("positive", ids, enabled)}
-          onUngroup={(ids) => onUngroup("positive", ids)}
           onSetLineGroup={(id, label) => onSetLineGroup("positive", id, label)}
           onReplaceGroup={(gid, label, prompts) => onReplaceGroup("positive", gid, label, prompts)}
-          onReplaceSelection={(ids, label, prompts) => onReplaceSelection("positive", ids, label, prompts)}
         />
       )}
 
@@ -140,6 +140,9 @@ export default function PromptEditor({
           groups={negativeGroups}
           weightMode={weightMode}
           viewMode={viewMode}
+          isSelectMode={isSelectMode}
+          selectedIds={selectedIds}
+          onSelectedIdsChange={onSelectedIdsChange}
           annotations={annotations}
           onSetAnnotation={onSetAnnotation}
           onToggle={(id) => onToggle("negative", id)}
@@ -152,12 +155,9 @@ export default function PromptEditor({
           }
           onWeightChange={(id, delta) => onWeightChange("negative", id, delta)}
           onWeightSet={(id, weight) => onWeightSet("negative", id, weight)}
-          onSetGroup={(ids, label) => onSetGroup("negative", ids, label)}
           onBulkToggle={(ids, enabled) => onBulkToggle("negative", ids, enabled)}
-          onUngroup={(ids) => onUngroup("negative", ids)}
           onSetLineGroup={(id, label) => onSetLineGroup("negative", id, label)}
           onReplaceGroup={(gid, label, prompts) => onReplaceGroup("negative", gid, label, prompts)}
-          onReplaceSelection={(ids, label, prompts) => onReplaceSelection("negative", ids, label, prompts)}
         />
       )}
     </div>

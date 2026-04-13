@@ -11,6 +11,7 @@ import {
   PromptGroup,
   ComfyGenerationOverrides,
   GenerationHistoryEntry,
+  DEFAULT_GROUP_CATEGORIES,
   parsePrompt,
   joinPromptLines,
   joinAllPromptLines,
@@ -92,6 +93,11 @@ import {
   saveNegativeTags,
 } from "@/utils/negativeTags";
 import { type SiglaneExportData } from "@/utils/exportImport";
+import {
+  addEntry,
+  createEntry,
+  getEntriesByCategory,
+} from "@/utils/dictionary";
 
 const STORAGE_KEY = "siglane-app-state";
 const LEGACY_STORAGE_KEY = "siglane-state";
@@ -164,6 +170,15 @@ export default function Home() {
   const [rightPanelTab, setRightPanelTab] = useState<"history" | "dictionary" | "presets">("history");
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [isDictionaryFullView, setIsDictionaryFullView] = useState(false);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectGroupDropdown, setSelectGroupDropdown] = useState(false);
+  const [selectNewGroupName, setSelectNewGroupName] = useState("");
+  const [selectSavingPreset, setSelectSavingPreset] = useState(false);
+  const [selectPresetName, setSelectPresetName] = useState("");
+  const [selectPresetCategory, setSelectPresetCategory] = useState("");
+  const [selectCategoryDropdown, setSelectCategoryDropdown] = useState(false);
+  const [selectReplaceDropdown, setSelectReplaceDropdown] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
   const toggleSection = useCallback((section: string) => {
@@ -173,6 +188,18 @@ export default function Home() {
       else next.add(section);
       return next;
     });
+  }, []);
+
+  const exitSelectMode = useCallback(() => {
+    setIsSelectMode(false);
+    setSelectedIds(new Set());
+    setSelectGroupDropdown(false);
+    setSelectNewGroupName("");
+    setSelectSavingPreset(false);
+    setSelectPresetName("");
+    setSelectPresetCategory("");
+    setSelectCategoryDropdown(false);
+    setSelectReplaceDropdown(false);
   }, []);
 
   // --- プロンプト注釈 ---
@@ -1578,18 +1605,19 @@ export default function Home() {
                 </div>
               )}
               <div className="flex items-center gap-1.5 text-xs">
-                <span className="text-neutral-600">Weight</span>
+                <span className={isSelectMode ? "text-sky-400" : "text-neutral-600"}>Select</span>
                 <button
-                  onClick={() =>
-                    setWeightMode((m) => (m === "combined" ? "none" : "combined"))
-                  }
+                  onClick={() => {
+                    if (isSelectMode) exitSelectMode();
+                    else setIsSelectMode(true);
+                  }}
                   className={`w-7 h-[16px] rounded-full relative transition-colors ${
-                    weightMode === "combined" ? "bg-sky-600" : "bg-neutral-600"
+                    isSelectMode ? "bg-sky-600" : "bg-neutral-600"
                   }`}
                 >
                   <span
                     className={`absolute top-[2px] w-[12px] h-[12px] rounded-full bg-white transition-all ${
-                      weightMode === "combined" ? "right-[2px]" : "left-[2px]"
+                      isSelectMode ? "right-[2px]" : "left-[2px]"
                     }`}
                   />
                 </button>
@@ -1951,6 +1979,9 @@ export default function Home() {
                     viewMode={viewMode}
                     positiveCollapsed={collapsedSections.has("lines-positive")}
                     negativeCollapsed={collapsedSections.has("lines-negative")}
+                    isSelectMode={isSelectMode}
+                    selectedIds={selectedIds}
+                    onSelectedIdsChange={(updater) => setSelectedIds(updater)}
                     onTogglePositiveCollapse={() => toggleSection("lines-positive")}
                     onToggleNegativeCollapse={() => toggleSection("lines-negative")}
                     onToggle={handleToggle}
@@ -1961,12 +1992,9 @@ export default function Home() {
                     onReorder={handleReorder}
                     onWeightChange={handleWeightChange}
                     onWeightSet={handleWeightSet}
-                    onSetGroup={handleSetGroup}
                     onBulkToggle={handleSectionBulkToggle}
-                    onUngroup={handleUngroup}
                     onSetLineGroup={handleSetLineGroup}
                     onReplaceGroup={handleReplaceGroup}
-                    onReplaceSelection={handleReplaceSelection}
                     annotations={annotations}
                     onSetAnnotation={handleSetAnnotation}
                   />
@@ -1992,6 +2020,340 @@ export default function Home() {
             </>
           )}
           </div>
+          {/* スティッキーアクションバー（Selectモード中 + 選択ありのみ） */}
+          {isSelectMode && selectedIds.size > 0 && activeSession && !isDictionaryFullView && (
+            <div className="flex-shrink-0 border-t border-neutral-700 bg-neutral-800/95 px-4 py-2 flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-neutral-300 font-medium">
+                {selectedIds.size} selected
+              </span>
+              <button
+                onClick={() => {
+                  if (!activeSession) return;
+                  setSelectedIds(new Set([
+                    ...activeSession.positiveLines.map((l) => l.id),
+                    ...activeSession.negativeLines.map((l) => l.id),
+                  ]));
+                }}
+                className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
+              >
+                All
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
+              >
+                None
+              </button>
+              <div className="flex-1" />
+              {/* Set Group */}
+              <div className="relative">
+                <button
+                  onClick={() => setSelectGroupDropdown((prev) => !prev)}
+                  className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors"
+                >
+                  Set Group ▼
+                </button>
+                {selectGroupDropdown && (
+                  <div
+                    className="absolute bottom-full right-0 mb-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[160px]"
+                    style={{ zIndex: 50 }}
+                  >
+                    {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => {
+                          const posIds = activeSession.positiveLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                          const negIds = activeSession.negativeLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                          if (posIds.length > 0) handleSetGroup("positive", posIds, cat);
+                          if (negIds.length > 0) handleSetGroup("negative", negIds, cat);
+                          setSelectGroupDropdown(false);
+                          setSelectedIds(new Set());
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700 transition-colors"
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                    <div className="border-t border-neutral-700 mt-1 pt-1 px-3 py-1">
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          value={selectNewGroupName}
+                          onChange={(e) => setSelectNewGroupName(e.target.value)}
+                          placeholder="Custom..."
+                          className="flex-1 bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-neutral-400 min-w-0"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && selectNewGroupName.trim()) {
+                              const label = selectNewGroupName.trim();
+                              const posIds = activeSession.positiveLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                              const negIds = activeSession.negativeLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                              if (posIds.length > 0) handleSetGroup("positive", posIds, label);
+                              if (negIds.length > 0) handleSetGroup("negative", negIds, label);
+                              setSelectGroupDropdown(false);
+                              setSelectNewGroupName("");
+                              setSelectedIds(new Set());
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            if (selectNewGroupName.trim()) {
+                              const label = selectNewGroupName.trim();
+                              const posIds = activeSession.positiveLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                              const negIds = activeSession.negativeLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                              if (posIds.length > 0) handleSetGroup("positive", posIds, label);
+                              if (negIds.length > 0) handleSetGroup("negative", negIds, label);
+                              setSelectGroupDropdown(false);
+                              setSelectNewGroupName("");
+                              setSelectedIds(new Set());
+                            }
+                          }}
+                          className="px-2 py-1 text-xs bg-sky-600 hover:bg-sky-500 text-white rounded transition-colors"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Save selection as preset */}
+              {selectSavingPreset ? (
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={selectPresetName}
+                    onChange={(e) => setSelectPresetName(e.target.value)}
+                    placeholder="Preset name..."
+                    autoFocus
+                    className="w-24 bg-neutral-900 border border-neutral-600 rounded px-1.5 py-0.5 text-[11px] text-neutral-200 focus:outline-none focus:border-sky-500"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && selectPresetName.trim() && selectPresetCategory.trim()) {
+                        const allLines = [...activeSession.positiveLines, ...activeSession.negativeLines];
+                        const prompts = allLines.filter((l) => selectedIds.has(l.id)).map((l) => l.text);
+                        addEntry(createEntry(selectPresetName.trim(), selectPresetCategory.trim(), prompts));
+                        setSelectSavingPreset(false);
+                        setSelectPresetName("");
+                        setSelectPresetCategory("");
+                      }
+                      if (e.key === "Escape") {
+                        setSelectSavingPreset(false);
+                        setSelectPresetName("");
+                        setSelectPresetCategory("");
+                      }
+                    }}
+                  />
+                  <div className="relative">
+                    <button
+                      onClick={() => setSelectCategoryDropdown((p) => !p)}
+                      className="px-1.5 py-0.5 text-[11px] bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded truncate max-w-[100px]"
+                    >
+                      {selectPresetCategory || "Category ▼"}
+                    </button>
+                    {selectCategoryDropdown && (
+                      <div
+                        className="absolute bottom-full right-0 mb-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[140px]"
+                        style={{ zIndex: 50 }}
+                      >
+                        {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+                          <button
+                            key={cat}
+                            onClick={() => {
+                              setSelectPresetCategory(cat);
+                              setSelectCategoryDropdown(false);
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700 transition-colors"
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (selectPresetName.trim() && selectPresetCategory.trim()) {
+                        const allLines = [...activeSession.positiveLines, ...activeSession.negativeLines];
+                        const prompts = allLines.filter((l) => selectedIds.has(l.id)).map((l) => l.text);
+                        addEntry(createEntry(selectPresetName.trim(), selectPresetCategory.trim(), prompts));
+                        setSelectSavingPreset(false);
+                        setSelectPresetName("");
+                        setSelectPresetCategory("");
+                      }
+                    }}
+                    disabled={!selectPresetName.trim() || !selectPresetCategory.trim()}
+                    className="px-1.5 py-0.5 text-[11px] bg-sky-600 hover:bg-sky-500 text-white rounded transition-colors disabled:opacity-40"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectSavingPreset(false);
+                      setSelectPresetName("");
+                      setSelectPresetCategory("");
+                    }}
+                    className="px-1 py-0.5 text-[10px] text-neutral-500 hover:text-neutral-300"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    // 選択行が全て同じグループなら、そのグループ名をカテゴリ初期値にする
+                    const allLines = [...activeSession.positiveLines, ...activeSession.negativeLines];
+                    const allGroups = [...(activeSession.positiveGroups ?? []), ...(activeSession.negativeGroups ?? [])];
+                    const selectedGroupIds = new Set(
+                      allLines.filter((l) => selectedIds.has(l.id)).map((l) => l.groupId).filter(Boolean),
+                    );
+                    const label = selectedGroupIds.size === 1
+                      ? allGroups.find((g) => g.id === Array.from(selectedGroupIds)[0])?.label ?? ""
+                      : "";
+                    setSelectSavingPreset(true);
+                    setSelectPresetCategory(label);
+                    setSelectReplaceDropdown(false);
+                  }}
+                  className="px-1.5 py-0.5 text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
+                  title="Save selection as preset"
+                >
+                  💾
+                </button>
+              )}
+              {/* Replace selection with preset */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setSelectReplaceDropdown((p) => !p);
+                    setSelectSavingPreset(false);
+                  }}
+                  className="px-1.5 py-0.5 text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
+                  title="Replace selection with preset"
+                >
+                  🔄
+                </button>
+                {selectReplaceDropdown && (
+                  <div
+                    className="absolute bottom-full right-0 mb-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[200px] max-h-[300px] overflow-y-auto"
+                    style={{ zIndex: 50 }}
+                  >
+                    {(() => {
+                      const allLines = [...activeSession.positiveLines, ...activeSession.negativeLines];
+                      const allGroups = [...(activeSession.positiveGroups ?? []), ...(activeSession.negativeGroups ?? [])];
+                      const selectedGroupIds = new Set(
+                        allLines.filter((l) => selectedIds.has(l.id)).map((l) => l.groupId).filter(Boolean),
+                      );
+                      const priorityLabel = selectedGroupIds.size === 1
+                        ? allGroups.find((g) => g.id === Array.from(selectedGroupIds)[0])?.label
+                        : undefined;
+                      const categoriesToShow = priorityLabel
+                        ? [priorityLabel, ...DEFAULT_GROUP_CATEGORIES.filter((c) => c !== priorityLabel)]
+                        : DEFAULT_GROUP_CATEGORIES;
+
+                      let hasAny = false;
+                      return (
+                        <>
+                          {categoriesToShow.map((cat) => {
+                            const presets = getEntriesByCategory(cat);
+                            if (presets.length === 0) return null;
+                            hasAny = true;
+                            return (
+                              <div key={cat}>
+                                <p className="px-3 py-1 text-[10px] text-neutral-500 font-medium border-b border-neutral-700">
+                                  {cat}
+                                </p>
+                                {presets.map((preset) => {
+                                  const selectedArr = Array.from(selectedIds);
+                                  // P側の選択IDで差し替え（主にP側で使われる想定）
+                                  const posIds = activeSession.positiveLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                                  const negIds = activeSession.negativeLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                                  return (
+                                    <button
+                                      key={preset.id}
+                                      onClick={() => {
+                                        if (posIds.length > 0) handleReplaceSelection("positive", posIds, cat, preset.prompts);
+                                        else if (negIds.length > 0) handleReplaceSelection("negative", negIds, cat, preset.prompts);
+                                        setSelectReplaceDropdown(false);
+                                        setSelectedIds(new Set());
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700 transition-colors"
+                                      title={preset.prompts.join(", ")}
+                                    >
+                                      <span className="font-medium">{preset.label}</span>
+                                      <span className="text-neutral-500 ml-1.5">({preset.prompts.length})</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                          {!hasAny && (
+                            <p className="px-3 py-2 text-xs text-neutral-500">No presets available</p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+              {/* ON / OFF */}
+              <button
+                onClick={() => {
+                  const posIds = activeSession.positiveLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                  const negIds = activeSession.negativeLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                  if (posIds.length > 0) handleSectionBulkToggle("positive", posIds, true);
+                  if (negIds.length > 0) handleSectionBulkToggle("negative", negIds, true);
+                  setSelectedIds(new Set());
+                }}
+                className="px-2 py-1 text-xs bg-green-800/50 hover:bg-green-800/70 text-green-300 rounded transition-colors"
+              >
+                ON
+              </button>
+              <button
+                onClick={() => {
+                  const posIds = activeSession.positiveLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                  const negIds = activeSession.negativeLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                  if (posIds.length > 0) handleSectionBulkToggle("positive", posIds, false);
+                  if (negIds.length > 0) handleSectionBulkToggle("negative", negIds, false);
+                  setSelectedIds(new Set());
+                }}
+                className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-300 rounded transition-colors"
+              >
+                OFF
+              </button>
+              {/* Ungroup */}
+              <button
+                onClick={() => {
+                  const posIds = activeSession.positiveLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                  const negIds = activeSession.negativeLines.filter((l) => selectedIds.has(l.id)).map((l) => l.id);
+                  if (posIds.length > 0) handleUngroup("positive", posIds);
+                  if (negIds.length > 0) handleUngroup("negative", negIds);
+                  setSelectedIds(new Set());
+                }}
+                className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-400 rounded transition-colors"
+              >
+                Ungroup
+              </button>
+              {/* Delete */}
+              <button
+                onClick={() => {
+                  selectedIds.forEach((id) => {
+                    const inPos = activeSession.positiveLines.some((l) => l.id === id);
+                    handleDelete(inPos ? "positive" : "negative", id);
+                  });
+                  setSelectedIds(new Set());
+                }}
+                className="px-2 py-1 text-xs bg-red-900/50 hover:bg-red-900/70 text-red-300 rounded transition-colors"
+              >
+                Delete
+              </button>
+              <button
+                onClick={exitSelectMode}
+                className="px-2 py-1 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
           </>
           )}
         </div>
