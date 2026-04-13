@@ -122,9 +122,9 @@ export function isApiFormat(json: unknown): boolean {
 
 // --- 解析 ---
 
-// サンプラー系ノードを探す
+// サンプラー系ノードを探す（export for pinning overlap detection）
 // positive/negative の入力がノード参照（[nodeId, slot]）であるノード
-function findSamplerNode(
+export function findSamplerNode(
   workflow: ComfyApiWorkflow,
 ): { nodeId: string; node: ComfyApiNode } | null {
   for (const [nodeId, node] of Object.entries(workflow)) {
@@ -417,5 +417,203 @@ export async function testConnection(
     const message =
       err instanceof Error ? err.message : "Connection refused";
     return { ok: false, error: message };
+  }
+}
+
+// --- ピン留め（Node Parameter Pinning） ---
+
+import type { PinnedParameter } from "@/types";
+
+// ピン留め候補となるパラメータ情報
+export interface PinnableParam {
+  paramName: string;
+  value: unknown;
+  type: "number" | "string" | "boolean";
+  // /object_info から取得した制約
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+export interface PinnableNode {
+  nodeId: string;
+  classType: string;
+  title: string;       // _meta.title or classType
+  params: PinnableParam[];
+  // Siglaneが既にバインドしてるノードか
+  isBound?: boolean;
+}
+
+// ワークフローからピン留め候補のノード＋パラメータを抽出
+export function extractPinnableNodes(
+  workflow: ComfyApiWorkflow,
+  positiveNodeId?: string,
+  negativeNodeId?: string,
+): PinnableNode[] {
+  const nodes: PinnableNode[] = [];
+
+  for (const [nodeId, node] of Object.entries(workflow)) {
+    const params: PinnableParam[] = [];
+
+    for (const [paramName, value] of Object.entries(node.inputs)) {
+      // ノード参照（接続）は除外
+      if (isNodeRef(value)) continue;
+      // null/undefinedは除外
+      if (value === null || value === undefined) continue;
+
+      const type = typeof value;
+      if (type === "number") {
+        params.push({ paramName, value, type: "number" });
+      } else if (type === "string") {
+        params.push({ paramName, value, type: "string" });
+      } else if (type === "boolean") {
+        params.push({ paramName, value, type: "boolean" });
+      }
+      // その他の型（object, array）は除外
+    }
+
+    if (params.length === 0) continue;
+
+    const isBound = nodeId === positiveNodeId || nodeId === negativeNodeId;
+    nodes.push({
+      nodeId,
+      classType: node.class_type,
+      title: node._meta?.title ?? node.class_type,
+      params,
+      isBound,
+    });
+  }
+
+  // バインド済みノードは後ろに、それ以外はノードIDの数値順
+  return nodes.sort((a, b) => {
+    if (a.isBound && !b.isBound) return 1;
+    if (!a.isBound && b.isBound) return -1;
+    return parseInt(a.nodeId) - parseInt(b.nodeId);
+  });
+}
+
+// ComfyUIの /object_info からノードの入力定義を取得
+export interface InputDef {
+  paramName: string;
+  type: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  default?: unknown;
+  isInteger?: boolean;
+  // 選択肢型（sampler_name, scheduler等）
+  options?: string[];
+}
+
+export async function fetchNodeInputDefs(
+  connection: ComfyConnection,
+  classType: string,
+): Promise<InputDef[]> {
+  try {
+    const url = `${connection.url.replace(/\/+$/, "")}/object_info/${classType}`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    const nodeInfo = data[classType];
+    if (!nodeInfo?.input) return [];
+
+    const defs: InputDef[] = [];
+    // required と optional の両方を処理
+    for (const section of ["required", "optional"]) {
+      const inputs = nodeInfo.input[section];
+      if (!inputs || typeof inputs !== "object") continue;
+
+      for (const [paramName, spec] of Object.entries(inputs)) {
+        if (!Array.isArray(spec) || spec.length === 0) continue;
+        const typeName = spec[0];
+        const opts = spec[1] as Record<string, unknown> | undefined;
+
+        // 選択肢型: typeNameが配列の場合 → [["euler", "euler_ancestral", ...]]
+        if (Array.isArray(typeName)) {
+          const options = typeName.filter((v): v is string => typeof v === "string");
+          if (options.length > 0) {
+            defs.push({ paramName, type: "COMBO", options });
+          }
+        } else if (typeName === "INT" || typeName === "FLOAT") {
+          defs.push({
+            paramName,
+            type: typeName,
+            min: typeof opts?.min === "number" ? opts.min : undefined,
+            max: typeof opts?.max === "number" ? opts.max : undefined,
+            step: typeof opts?.step === "number" ? opts.step : (typeName === "INT" ? 1 : undefined),
+            default: opts?.default,
+            isInteger: typeName === "INT",
+          });
+        } else if (typeof typeName === "string") {
+          defs.push({ paramName, type: typeName });
+        }
+      }
+    }
+    return defs;
+  } catch {
+    return [];
+  }
+}
+
+// ピン留めされた値をワークフローに適用
+export function applyPinnedParameters(
+  workflow: ComfyApiWorkflow,
+  pins: PinnedParameter[],
+): ComfyApiWorkflow {
+  const wf = JSON.parse(JSON.stringify(workflow)) as ComfyApiWorkflow;
+
+  for (const pin of pins) {
+    const node = wf[pin.nodeId];
+    if (!node) continue;
+    // seed="random"の場合はランダム整数を生成
+    if (pin.paramName === "seed" && pin.value === "random") {
+      node.inputs[pin.paramName] = Math.floor(Math.random() * 2 ** 32);
+    } else {
+      node.inputs[pin.paramName] = pin.value;
+    }
+  }
+
+  return wf;
+}
+
+// --- LoadImage画像アップロード ---
+
+export interface UploadImageResult {
+  success: boolean;
+  filename?: string;  // ComfyUI上のファイル名
+  error?: string;
+}
+
+// ComfyUIの /upload/image に画像をアップロード
+export async function uploadImageToComfy(
+  connection: ComfyConnection,
+  file: File,
+): Promise<UploadImageResult> {
+  try {
+    const url = `${connection.url.replace(/\/+$/, "")}/upload/image`;
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const response = await fetch(url, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return { success: false, error: `Upload failed: ${response.status} ${text.slice(0, 200)}` };
+    }
+
+    const data = await response.json();
+    // ComfyUIは { name: "filename.png", subfolder: "", type: "input" } を返す
+    const filename = data.name;
+    if (!filename) {
+      return { success: false, error: "Upload succeeded but no filename returned" };
+    }
+    return { success: true, filename };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return { success: false, error: `Upload failed: ${message}` };
   }
 }

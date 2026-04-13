@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   AppState,
@@ -10,6 +10,7 @@ import {
   PromptLine,
   PromptGroup,
   ComfyGenerationOverrides,
+  PinnedParameter,
   GenerationHistoryEntry,
   DEFAULT_GROUP_CATEGORIES,
   parsePrompt,
@@ -31,6 +32,7 @@ import GenerationHistory from "@/components/GenerationHistory";
 import DictionaryView from "@/components/DictionaryView";
 import DictionaryBrowser from "@/components/DictionaryBrowser";
 import PresetBrowser from "@/components/PresetBrowser";
+import WorkflowPanel from "@/components/WorkflowPanel";
 import SessionSidebar from "@/components/SessionSidebar";
 import { WeightMode } from "@/components/PromptLineItem";
 import {
@@ -60,6 +62,9 @@ import {
   getActiveConnection,
   createDefaultSettings,
   testConnection,
+  applyPinnedParameters,
+  findSamplerNode,
+  uploadImageToComfy,
 } from "@/utils/comfyApi";
 import {
   loadAnnotations,
@@ -167,7 +172,7 @@ export default function Home() {
   const [headerRenameValue, setHeaderRenameValue] = useState("");
   const [weightMode, setWeightMode] = useState<WeightMode>("combined");
   const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
-  const [rightPanelTab, setRightPanelTab] = useState<"history" | "dictionary" | "presets">("history");
+  const [rightPanelTab, setRightPanelTab] = useState<"history" | "dictionary" | "presets" | "workflow">("history");
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [isDictionaryFullView, setIsDictionaryFullView] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -783,6 +788,7 @@ export default function Home() {
         setShowApiWorkflowModal(false);
         setShowComfySettingsModal(false);
         setShowLlmSettingsModal(false);
+        setRefImageLightboxUrl(null);
       }
     };
     window.addEventListener("keydown", handleGlobalKey);
@@ -1257,7 +1263,13 @@ export default function Home() {
     };
     const finalWorkflow = applyOverrides(updatedWorkflow, overrides);
 
-    const result = await queuePrompt(conn, finalWorkflow);
+    // ピン留めパラメータを適用
+    const pins = activeSession.pinnedParameters ?? [];
+    const workflowWithPins = pins.length > 0
+      ? applyPinnedParameters(finalWorkflow, pins)
+      : finalWorkflow;
+
+    const result = await queuePrompt(conn, workflowWithPins);
 
     setIsGenerating(false);
 
@@ -1270,9 +1282,9 @@ export default function Home() {
 
         const snapshotOverrides = { ...overrides };
         const snapshotSessionId = appState.activeSessionId;
-        // applyOverridesでランダム化されたseedを取得
+        // ランダム化されたseedを取得（固定パネル or ピン留めのどちらかから）
         if (snapshotOverrides.seed === "random") {
-          for (const node of Object.values(finalWorkflow)) {
+          for (const node of Object.values(workflowWithPins)) {
             if (typeof node.inputs?.seed === "number") {
               snapshotOverrides.seed = node.inputs.seed as number;
               break;
@@ -1380,6 +1392,95 @@ export default function Home() {
     },
     [updateActiveSession],
   );
+
+  // --- ピン留めパラメータ操作 ---
+  const handlePinParameter = useCallback(
+    (pin: PinnedParameter) => {
+      updateActiveSession((s) => ({
+        ...s,
+        pinnedParameters: [...(s.pinnedParameters ?? []), pin],
+      }));
+    },
+    [updateActiveSession],
+  );
+
+  const handleUnpinParameter = useCallback(
+    (pinId: string) => {
+      updateActiveSession((s) => ({
+        ...s,
+        pinnedParameters: (s.pinnedParameters ?? []).filter((p) => p.id !== pinId),
+      }));
+    },
+    [updateActiveSession],
+  );
+
+  const handleUpdatePinnedValue = useCallback(
+    (pinId: string, value: unknown) => {
+      updateActiveSession((s) => ({
+        ...s,
+        pinnedParameters: (s.pinnedParameters ?? []).map((p) =>
+          p.id === pinId ? { ...p, value } : p,
+        ),
+      }));
+    },
+    [updateActiveSession],
+  );
+
+  // LoadImage用: 画像をComfyUIにアップロードしてファイル名をピン留め値にセット
+  const [uploadingPinId, setUploadingPinId] = useState<string | null>(null);
+  const [refImageLightboxUrl, setRefImageLightboxUrl] = useState<string | null>(null);
+  const handleUploadImage = useCallback(
+    async (pinId: string, file: File) => {
+      const conn = getActiveConnection(comfySettings);
+      if (!conn) {
+        setGenerateToast({ message: "ComfyUI not connected", type: "error" });
+        return;
+      }
+      setUploadingPinId(pinId);
+      const result = await uploadImageToComfy(conn, file);
+      setUploadingPinId(null);
+      if (result.success && result.filename) {
+        handleUpdatePinnedValue(pinId, result.filename);
+        setGenerateToast({ message: `Uploaded: ${result.filename}`, type: "success" });
+      } else {
+        setGenerateToast({ message: result.error ?? "Upload failed", type: "error" });
+      }
+    },
+    [comfySettings, handleUpdatePinnedValue, setGenerateToast],
+  );
+
+  // ピン留めと固定パネルの重複検出
+  // サンプラーノードのパラメータがピン留め済みなら固定パネルから隠す
+  const hiddenOverrides = useMemo(() => {
+    const hidden = new Set<string>();
+    if (!activeSession?.comfyApiWorkflow || !activeSession.pinnedParameters?.length) return hidden;
+
+    const wf = activeSession.comfyApiWorkflow as ComfyApiWorkflow;
+    const sampler = findSamplerNode(wf);
+    if (!sampler) return hidden;
+
+    // 固定パネルの表示名 → ワークフローのパラメータ名のマッピング
+    const overrideToParam: Record<string, string> = {
+      seed: "seed",
+      cfg: "cfg",
+      steps: "steps",
+      samplerName: "sampler_name",
+      scheduler: "scheduler",
+      denoise: "denoise",
+    };
+
+    for (const pin of activeSession.pinnedParameters) {
+      if (pin.nodeId === sampler.nodeId) {
+        // このピンがサンプラーノードを対象にしている
+        for (const [overrideKey, paramName] of Object.entries(overrideToParam)) {
+          if (pin.paramName === paramName) {
+            hidden.add(overrideKey);
+          }
+        }
+      }
+    }
+    return hidden;
+  }, [activeSession?.comfyApiWorkflow, activeSession?.pinnedParameters]);
 
   // handleGenerateの最新参照をrefで保持（useEffect内から呼ぶため）
   const handleGenerateRef = useRef(handleGenerate);
@@ -1563,25 +1664,61 @@ export default function Home() {
                       )}
                     </div>
                   )}
-                  {/* PNG サムネイル */}
-                  {activeSession?.thumbnailDataUrl && (
-                    <div className="flex items-center gap-2 mt-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={activeSession.thumbnailDataUrl}
-                        alt="Generated image thumbnail"
-                        className="h-16 w-auto rounded border border-neutral-700 object-cover cursor-pointer hover:border-neutral-500 transition-colors"
-                        title="Click to remove thumbnail"
-                        onClick={() =>
-                          updateActiveSession((s) => ({
-                            ...s,
-                            thumbnailDataUrl: undefined,
-                          }))
-                        }
-                      />
-                      <span className="text-[10px] text-neutral-600">
-                        Click to remove
-                      </span>
+                  {/* PNG サムネイル + Reference Image */}
+                  {(activeSession?.thumbnailDataUrl || (() => {
+                    const pin = activeSession?.pinnedParameters?.find(
+                      (p) => p.nodeClassType === "LoadImage" && p.paramName === "image" && p.value && p.value !== "none"
+                    );
+                    return pin && getActiveConnection(comfySettings);
+                  })()) && (
+                    <div className="flex items-start gap-4 mt-2">
+                      {/* セッションサムネイル */}
+                      {activeSession?.thumbnailDataUrl && (
+                        <div className="flex flex-col items-center gap-1">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={activeSession.thumbnailDataUrl}
+                            alt="Generated image thumbnail"
+                            className="h-16 w-auto rounded border border-neutral-700 object-cover cursor-pointer hover:border-neutral-500 transition-colors"
+                            title="Click to remove thumbnail"
+                            onClick={() =>
+                              updateActiveSession((s) => ({
+                                ...s,
+                                thumbnailDataUrl: undefined,
+                              }))
+                            }
+                          />
+                          <span className="text-[10px] text-neutral-600">
+                            Click to remove
+                          </span>
+                        </div>
+                      )}
+                      {/* Reference Image */}
+                      {(() => {
+                        const pin = activeSession?.pinnedParameters?.find(
+                          (p) => p.nodeClassType === "LoadImage" && p.paramName === "image" && p.value && p.value !== "none"
+                        );
+                        if (!pin) return null;
+                        const conn = getActiveConnection(comfySettings);
+                        if (!conn) return null;
+                        const previewUrl = `${conn.url.replace(/\/+$/, "")}/view?filename=${encodeURIComponent(String(pin.value))}&type=input`;
+                        return (
+                          <div className="flex flex-col items-center gap-1">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={previewUrl}
+                              alt="Reference image"
+                              className="h-[120px] w-auto rounded-lg object-cover border border-amber-800/40 cursor-pointer hover:border-amber-500 transition-colors"
+                              title="Click to view full size"
+                              onClick={() => setRefImageLightboxUrl(previewUrl)}
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                            <span className="text-[10px] text-amber-600">
+                              Reference
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -1675,261 +1812,262 @@ export default function Home() {
                 }
               >
                 {/* 生成パラメータパネル */}
-                {activeSession.comfyOverrides && (
-                  <div className="mb-4 bg-neutral-800/50 rounded-lg px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-                    {/* seed */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-neutral-500">seed</span>
-                      {activeSession.comfyOverrides.seed === "random" ? (
-                        <button
-                          onClick={() => {
-                            const current = activeSession.comfyOverrides;
-                            if (!current) return;
-                            handleUpdateOverrides({
-                              seed: Math.floor(Math.random() * 2 ** 32),
-                            });
-                          }}
-                          className="text-sky-500 hover:text-sky-400 transition-colors font-mono"
-                          title="Click to fix to a specific seed"
-                        >
-                          🎲 random
-                        </button>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <span
-                            className="text-neutral-200 font-mono cursor-text"
-                            title="Click random to unfix"
-                          >
-                            {activeSession.comfyOverrides.seed}
-                          </span>
+                {activeSession.comfyOverrides && (() => {
+                  const ov = activeSession.comfyOverrides!;
+                  const h = hiddenOverrides;
+                  const sections: React.ReactNode[] = [];
+
+                  // seed
+                  if (!h.has("seed")) {
+                    sections.push(
+                      <div key="seed" className="flex items-center gap-1.5">
+                        <span className="text-neutral-500">seed</span>
+                        {ov.seed === "random" ? (
                           <button
-                            onClick={() =>
-                              handleUpdateOverrides({ seed: "random" })
-                            }
-                            className="text-neutral-500 hover:text-sky-400 transition-colors"
-                            title="Switch to random seed"
+                            onClick={() => handleUpdateOverrides({ seed: Math.floor(Math.random() * 2 ** 32) })}
+                            className="text-sky-500 hover:text-sky-400 transition-colors font-mono"
+                            title="Click to fix to a specific seed"
                           >
-                            🎲
+                            🎲 random
                           </button>
-                        </div>
-                      )}
-                    </div>
-                    <span className="text-neutral-700">|</span>
-                    {/* cfg */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-neutral-500">cfg</span>
-                      <button
-                        onClick={() =>
-                          handleUpdateOverrides({
-                            cfg: Math.max(
-                              1,
-                              Math.round(
-                                (activeSession.comfyOverrides!.cfg - 0.5) * 10,
-                              ) / 10,
-                            ),
-                          })
-                        }
-                        className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        value={activeSession.comfyOverrides.cfg}
-                        onChange={(e) => {
-                          const v = parseFloat(e.target.value);
-                          if (!isNaN(v) && v >= 1 && v <= 30)
-                            handleUpdateOverrides({ cfg: v });
-                        }}
-                        className="w-12 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none"
-                        step={0.5}
-                        min={1}
-                        max={30}
-                      />
-                      <button
-                        onClick={() =>
-                          handleUpdateOverrides({
-                            cfg: Math.min(
-                              30,
-                              Math.round(
-                                (activeSession.comfyOverrides!.cfg + 0.5) * 10,
-                              ) / 10,
-                            ),
-                          })
-                        }
-                        className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <span className="text-neutral-700">|</span>
-                    {/* steps */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-neutral-500">steps</span>
-                      <button
-                        onClick={() =>
-                          handleUpdateOverrides({
-                            steps: Math.max(
-                              1,
-                              activeSession.comfyOverrides!.steps - 1,
-                            ),
-                          })
-                        }
-                        className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        value={activeSession.comfyOverrides.steps}
-                        onChange={(e) => {
-                          const v = parseInt(e.target.value);
-                          if (!isNaN(v) && v >= 1 && v <= 150)
-                            handleUpdateOverrides({ steps: v });
-                        }}
-                        className="w-10 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none"
-                        step={1}
-                        min={1}
-                        max={150}
-                      />
-                      <button
-                        onClick={() =>
-                          handleUpdateOverrides({
-                            steps: Math.min(
-                              150,
-                              activeSession.comfyOverrides!.steps + 1,
-                            ),
-                          })
-                        }
-                        className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <span className="text-neutral-700">|</span>
-                    {/* sampler */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-neutral-500">sampler</span>
-                      <select
-                        value={activeSession.comfyOverrides.samplerName}
-                        onChange={(e) =>
-                          handleUpdateOverrides({ samplerName: e.target.value })
-                        }
-                        className="bg-neutral-800 text-neutral-200 font-mono text-xs border border-neutral-700 rounded px-1.5 py-0.5 focus:border-neutral-400 focus:outline-none cursor-pointer"
-                      >
-                        {[
-                          "euler", "euler_ancestral", "euler_cfg_pp", "heun", "heunpp2",
-                          "dpm_2", "dpm_2_ancestral", "lms", "dpm_fast", "dpm_adaptive",
-                          "dpmpp_2s_ancestral", "dpmpp_sde", "dpmpp_sde_gpu",
-                          "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2m_sde_gpu",
-                          "dpmpp_3m_sde", "dpmpp_3m_sde_gpu",
-                          "ddpm", "lcm", "ddim", "uni_pc", "uni_pc_bh2",
-                        ].map((s) => (
-                          <option key={s} value={s} className="bg-neutral-800 text-neutral-200">
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <span className="text-neutral-700">|</span>
-                    {/* scheduler */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-neutral-500">scheduler</span>
-                      <select
-                        value={activeSession.comfyOverrides.scheduler}
-                        onChange={(e) =>
-                          handleUpdateOverrides({ scheduler: e.target.value })
-                        }
-                        className="bg-neutral-800 text-neutral-200 font-mono text-xs border border-neutral-700 rounded px-1.5 py-0.5 focus:border-neutral-400 focus:outline-none cursor-pointer"
-                      >
-                        {[
-                          "normal", "karras", "exponential", "sgm_uniform",
-                          "simple", "ddim_uniform", "beta",
-                        ].map((s) => (
-                          <option key={s} value={s} className="bg-neutral-800 text-neutral-200">
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {/* resolution (EmptyLatentImageから取得時のみ表示) */}
-                    {activeSession.comfyOverrides.width && activeSession.comfyOverrides.height && (
-                      <>
-                        <span className="text-neutral-700">|</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-neutral-500">size</span>
-                          <input
-                            type="number"
-                            value={activeSession.comfyOverrides.width}
-                            onChange={(e) => {
-                              const v = parseInt(e.target.value);
-                              if (!isNaN(v) && v >= 64 && v <= 4096)
-                                handleUpdateOverrides({ width: v });
-                            }}
-                            className="w-14 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none"
-                            step={64}
-                            min={64}
-                            max={4096}
-                          />
-                          <span className="text-neutral-600">×</span>
-                          <input
-                            type="number"
-                            value={activeSession.comfyOverrides.height}
-                            onChange={(e) => {
-                              const v = parseInt(e.target.value);
-                              if (!isNaN(v) && v >= 64 && v <= 4096)
-                                handleUpdateOverrides({ height: v });
-                            }}
-                            className="w-14 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none"
-                            step={64}
-                            min={64}
-                            max={4096}
-                          />
-                          <button
-                            onClick={() => {
-                              const w = activeSession.comfyOverrides!.width!;
-                              const h = activeSession.comfyOverrides!.height!;
-                              handleUpdateOverrides({ width: h, height: w });
-                            }}
-                            className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5"
-                            title="Swap width and height"
-                          >
-                            ⇄
-                          </button>
-                        </div>
-                      </>
-                    )}
-                    {/* denoise (1.0以外の場合のみ表示) */}
-                    {activeSession.comfyOverrides.denoise !== 1.0 && (
-                      <>
-                        <span className="text-neutral-700">|</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-neutral-500">denoise</span>
-                          <input
-                            type="number"
-                            value={activeSession.comfyOverrides.denoise}
-                            onChange={(e) => {
-                              const v = parseFloat(e.target.value);
-                              if (!isNaN(v) && v >= 0 && v <= 1)
-                                handleUpdateOverrides({ denoise: v });
-                            }}
-                            className="w-12 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none"
-                            step={0.05}
-                            min={0}
-                            max={1}
-                          />
-                        </div>
-                      </>
-                    )}
-                    {/* API workflow再読み込み */}
-                    <span className="text-neutral-700">|</span>
-                    <button
-                      onClick={() => setShowApiWorkflowModal(true)}
-                      className="text-neutral-500 hover:text-sky-400 transition-colors"
-                      title="Load a different API workflow"
-                    >
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <span className="text-neutral-200 font-mono cursor-text" title="Click random to unfix">
+                              {ov.seed}
+                            </span>
+                            <button
+                              onClick={() => handleUpdateOverrides({ seed: "random" })}
+                              className="text-neutral-500 hover:text-sky-400 transition-colors"
+                              title="Switch to random seed"
+                            >
+                              🎲
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // cfg
+                  if (!h.has("cfg")) {
+                    sections.push(
+                      <div key="cfg" className="flex items-center gap-1">
+                        <span className="text-neutral-500">cfg</span>
+                        <button onClick={() => handleUpdateOverrides({ cfg: Math.max(1, Math.round((ov.cfg - 0.5) * 10) / 10) })} className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5">−</button>
+                        <input type="number" value={ov.cfg} onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= 1 && v <= 30) handleUpdateOverrides({ cfg: v }); }} className="w-12 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none" step={0.5} min={1} max={30} />
+                        <button onClick={() => handleUpdateOverrides({ cfg: Math.min(30, Math.round((ov.cfg + 0.5) * 10) / 10) })} className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5">+</button>
+                      </div>
+                    );
+                  }
+
+                  // steps
+                  if (!h.has("steps")) {
+                    sections.push(
+                      <div key="steps" className="flex items-center gap-1">
+                        <span className="text-neutral-500">steps</span>
+                        <button onClick={() => handleUpdateOverrides({ steps: Math.max(1, ov.steps - 1) })} className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5">−</button>
+                        <input type="number" value={ov.steps} onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1 && v <= 150) handleUpdateOverrides({ steps: v }); }} className="w-10 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none" step={1} min={1} max={150} />
+                        <button onClick={() => handleUpdateOverrides({ steps: Math.min(150, ov.steps + 1) })} className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5">+</button>
+                      </div>
+                    );
+                  }
+
+                  // sampler
+                  if (!h.has("samplerName")) {
+                    sections.push(
+                      <div key="sampler" className="flex items-center gap-1.5">
+                        <span className="text-neutral-500">sampler</span>
+                        <select value={ov.samplerName} onChange={(e) => handleUpdateOverrides({ samplerName: e.target.value })} className="bg-neutral-800 text-neutral-200 font-mono text-xs border border-neutral-700 rounded px-1.5 py-0.5 focus:border-neutral-400 focus:outline-none cursor-pointer">
+                          {["euler","euler_ancestral","euler_cfg_pp","heun","heunpp2","dpm_2","dpm_2_ancestral","lms","dpm_fast","dpm_adaptive","dpmpp_2s_ancestral","dpmpp_sde","dpmpp_sde_gpu","dpmpp_2m","dpmpp_2m_sde","dpmpp_2m_sde_gpu","dpmpp_3m_sde","dpmpp_3m_sde_gpu","ddpm","lcm","ddim","uni_pc","uni_pc_bh2"].map((s) => (
+                            <option key={s} value={s} className="bg-neutral-800 text-neutral-200">{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  }
+
+                  // scheduler
+                  if (!h.has("scheduler")) {
+                    sections.push(
+                      <div key="scheduler" className="flex items-center gap-1.5">
+                        <span className="text-neutral-500">scheduler</span>
+                        <select value={ov.scheduler} onChange={(e) => handleUpdateOverrides({ scheduler: e.target.value })} className="bg-neutral-800 text-neutral-200 font-mono text-xs border border-neutral-700 rounded px-1.5 py-0.5 focus:border-neutral-400 focus:outline-none cursor-pointer">
+                          {["normal","karras","exponential","sgm_uniform","simple","ddim_uniform","beta"].map((s) => (
+                            <option key={s} value={s} className="bg-neutral-800 text-neutral-200">{s}</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  }
+
+                  // resolution
+                  if (ov.width && ov.height) {
+                    sections.push(
+                      <div key="size" className="flex items-center gap-1">
+                        <span className="text-neutral-500">size</span>
+                        <input type="number" value={ov.width} onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 64 && v <= 4096) handleUpdateOverrides({ width: v }); }} className="w-14 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none" step={64} min={64} max={4096} />
+                        <span className="text-neutral-600">×</span>
+                        <input type="number" value={ov.height} onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 64 && v <= 4096) handleUpdateOverrides({ height: v }); }} className="w-14 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none" step={64} min={64} max={4096} />
+                        <button onClick={() => handleUpdateOverrides({ width: ov.height!, height: ov.width! })} className="text-neutral-500 hover:text-neutral-300 transition-colors px-0.5" title="Swap width and height">⇄</button>
+                      </div>
+                    );
+                  }
+
+                  // denoise
+                  if (!h.has("denoise") && ov.denoise !== 1.0) {
+                    sections.push(
+                      <div key="denoise" className="flex items-center gap-1">
+                        <span className="text-neutral-500">denoise</span>
+                        <input type="number" value={ov.denoise} onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= 0 && v <= 1) handleUpdateOverrides({ denoise: v }); }} className="w-12 bg-transparent text-neutral-200 text-center font-mono border-b border-neutral-700 focus:border-neutral-400 focus:outline-none" step={0.05} min={0} max={1} />
+                      </div>
+                    );
+                  }
+
+                  // workflow reload
+                  sections.push(
+                    <button key="wf" onClick={() => setShowApiWorkflowModal(true)} className="text-neutral-500 hover:text-sky-400 transition-colors" title="Load a different API workflow">
                       ↻ workflow
                     </button>
+                  );
+
+                  return sections.length > 1 ? (
+                    <div className="mb-4 bg-neutral-800/50 rounded-lg px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                      {sections.map((section, i) => (
+                        <React.Fragment key={i}>
+                          {i > 0 && <span className="text-neutral-700">|</span>}
+                          {section}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
+                {/* ピン留めパラメータパネル */}
+                {(activeSession.pinnedParameters?.length ?? 0) > 0 && (
+                  <div className="mb-4 bg-amber-900/10 border border-amber-800/20 rounded-lg px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                    <span className="text-amber-600 text-[10px] flex-shrink-0">📌 Pinned</span>
+                    {activeSession.pinnedParameters!.map((pin, idx) => (
+                      <div key={pin.id} className="flex items-center gap-1.5">
+                        {idx > 0 && <span className="text-neutral-700">|</span>}
+                        <span className="text-neutral-500" title={pin.label}>
+                          {pin.paramName}
+                        </span>
+                        {pin.nodeClassType === "LoadImage" && pin.paramName === "image" ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-amber-300 font-mono text-[10px] max-w-[120px] truncate" title={String(pin.value ?? "")}>
+                              {String(pin.value ?? "none")}
+                            </span>
+                            <label className={`cursor-pointer px-2 py-0.5 rounded text-[10px] transition-colors ${
+                              uploadingPinId === pin.id
+                                ? "bg-neutral-700 text-neutral-500 cursor-wait"
+                                : "bg-amber-800/40 text-amber-400 hover:bg-amber-800/60"
+                            }`}>
+                              {uploadingPinId === pin.id ? "Uploading..." : "📁 Choose"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={uploadingPinId === pin.id}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleUploadImage(pin.id, file);
+                                  e.target.value = "";
+                                }}
+                              />
+                            </label>
+                          </div>
+                        ) : pin.options && pin.options.length > 0 ? (
+                          <select
+                            value={String(pin.value ?? "")}
+                            onChange={(e) => handleUpdatePinnedValue(pin.id, e.target.value)}
+                            className="bg-neutral-800 text-amber-300 font-mono text-xs border border-amber-800/50 rounded px-1.5 py-0.5 focus:border-amber-500 focus:outline-none cursor-pointer"
+                          >
+                            {pin.options.map((opt) => (
+                              <option key={opt} value={opt} className="bg-neutral-800 text-neutral-200">{opt}</option>
+                            ))}
+                          </select>
+                        ) : pin.type === "number" ? (
+                          <div className="flex items-center gap-1">
+                            {/* Seed: 🎲ランダムトグル */}
+                            {pin.paramName === "seed" && (
+                              <button
+                                onClick={() => {
+                                  if (pin.value === "random") {
+                                    handleUpdatePinnedValue(pin.id, Math.floor(Math.random() * 2 ** 32));
+                                  } else {
+                                    handleUpdatePinnedValue(pin.id, "random");
+                                  }
+                                }}
+                                className={`transition-colors ${pin.value === "random" ? "text-sky-500" : "text-neutral-600 hover:text-sky-400"}`}
+                                title={pin.value === "random" ? "Click to fix seed" : "Click for random seed"}
+                              >
+                                🎲
+                              </button>
+                            )}
+                            {pin.value === "random" ? (
+                              <span className="text-sky-400 font-mono text-[10px]">random</span>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    const cur = typeof pin.value === "number" ? pin.value : 0;
+                                    const s = pin.isInteger ? 1 : (pin.step || 0.01);
+                                    const next = pin.isInteger ? cur - s : Math.round((cur - s) * 10000) / 10000;
+                                    handleUpdatePinnedValue(pin.id, pin.min != null ? Math.max(pin.min, next) : next);
+                                  }}
+                                  className="text-neutral-600 hover:text-neutral-300 transition-colors px-0.5"
+                                  title={`step: ${pin.isInteger ? 1 : (pin.step || 0.01)}`}
+                                >−</button>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={typeof pin.value === "number" ? pin.value : 0}
+                                  onChange={(e) => {
+                                    const v = pin.isInteger ? parseInt(e.target.value) : parseFloat(e.target.value);
+                                    if (isNaN(v)) return;
+                                    const clamped = Math.max(pin.min ?? -Infinity, Math.min(pin.max ?? Infinity, pin.isInteger ? Math.round(v) : v));
+                                    handleUpdatePinnedValue(pin.id, clamped);
+                                  }}
+                                  className={`bg-transparent text-amber-300 text-center font-mono border-b border-amber-800/50 focus:border-amber-500 focus:outline-none ${
+                                    pin.paramName === "seed" ? "w-24" : "w-16"
+                                  }`}
+                                />
+                                <button
+                                  onClick={() => {
+                                    const cur = typeof pin.value === "number" ? pin.value : 0;
+                                    const s = pin.isInteger ? 1 : (pin.step || 0.01);
+                                    const next = pin.isInteger ? cur + s : Math.round((cur + s) * 10000) / 10000;
+                                    handleUpdatePinnedValue(pin.id, pin.max != null ? Math.min(pin.max, next) : next);
+                                  }}
+                                  className="text-neutral-600 hover:text-neutral-300 transition-colors px-0.5"
+                                  title={`step: ${pin.isInteger ? 1 : (pin.step || 0.01)}`}
+                                >+</button>
+                              </>
+                            )}
+                          </div>
+                        ) : pin.type === "boolean" ? (
+                          <button
+                            onClick={() => handleUpdatePinnedValue(pin.id, !pin.value)}
+                            className={`font-mono ${pin.value ? "text-green-400" : "text-red-400"}`}
+                          >
+                            {pin.value ? "true" : "false"}
+                          </button>
+                        ) : (
+                          <input
+                            type="text"
+                            value={String(pin.value ?? "")}
+                            onChange={(e) => handleUpdatePinnedValue(pin.id, e.target.value)}
+                            className="w-24 bg-transparent text-amber-300 text-center font-mono border-b border-amber-800/50 focus:border-amber-500 focus:outline-none"
+                          />
+                        )}
+                        <button
+                          onClick={() => handleUpdatePinnedValue(pin.id, pin.defaultValue)}
+                          className="text-neutral-700 hover:text-neutral-400 transition-colors"
+                          title={`Reset to default (${pin.defaultValue})`}
+                        >
+                          ↺
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
                 <div className="space-y-4 mb-6">
@@ -2439,6 +2577,19 @@ export default function Home() {
               <path d="M5 6h6M5 8.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
             </svg>
           </button>
+          {activeSession?.comfyApiWorkflow && (
+          <button
+            onClick={() => { setRightPanelCollapsed(false); setRightPanelTab("workflow"); }}
+            className={`p-1.5 transition-colors ${rightPanelTab === "workflow" ? "text-neutral-200" : "text-neutral-500 hover:text-neutral-300"}`}
+            title="Workflow Nodes"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="1" y="2" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.2" />
+              <rect x="9" y="10" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M7 4h2v4h-2M9 12H7V8h2" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+          </button>
+          )}
         </div>
       ) : (
       <div className="w-[340px] flex-shrink-0 border-l border-neutral-800 flex flex-col h-full bg-neutral-900">
@@ -2479,6 +2630,23 @@ export default function Home() {
           >
             Presets
           </button>
+          {activeSession?.comfyApiWorkflow && (
+          <button
+            onClick={() => setRightPanelTab("workflow")}
+            className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+              rightPanelTab === "workflow"
+                ? "bg-neutral-700 text-neutral-200"
+                : "text-neutral-500 hover:text-neutral-300"
+            }`}
+          >
+            Nodes
+            {(activeSession.pinnedParameters?.length ?? 0) > 0 && (
+              <span className="ml-1.5 text-[10px] text-amber-500">
+                📌{activeSession.pinnedParameters!.length}
+              </span>
+            )}
+          </button>
+          )}
           <div className="flex-1" />
           <button
             onClick={() => setRightPanelCollapsed(true)}
@@ -2555,9 +2723,49 @@ export default function Home() {
             />
           </div>
         )}
+        {rightPanelTab === "workflow" && (
+          <div className="flex-1 min-h-0 flex flex-col px-3 pb-3">
+            <WorkflowPanel
+              workflow={activeSession?.comfyApiWorkflow as ComfyApiWorkflow | undefined}
+              positiveNodeId={activeSession?.comfyApiPositiveNodeId}
+              negativeNodeId={activeSession?.comfyApiNegativeNodeId}
+              pinnedParameters={activeSession?.pinnedParameters ?? []}
+              connection={getActiveConnection(comfySettings)}
+              onPinParameter={handlePinParameter}
+              onUnpinParameter={handleUnpinParameter}
+            />
+          </div>
+        )}
       </div>
       ))}
       </div>
+
+      {/* Reference Image Lightbox */}
+      {refImageLightboxUrl &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-pointer"
+            onClick={() => setRefImageLightboxUrl(null)}
+          >
+            <div className="absolute top-4 right-4">
+              <button
+                onClick={() => setRefImageLightboxUrl(null)}
+                className="text-neutral-400 hover:text-white text-2xl leading-none"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={refImageLightboxUrl}
+              alt="Reference image"
+              className="max-h-[90vh] max-w-[90vw] object-contain rounded"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>,
+          document.body,
+        )}
 
       {/* ヘルプオーバーレイ */}
       {showHelp &&

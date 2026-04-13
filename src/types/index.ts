@@ -62,6 +62,8 @@ export interface Session {
   comfyApiNegativeNodeId?: string;
   // 生成パラメータオーバーライド（UIから編集可能）
   comfyOverrides?: ComfyGenerationOverrides;
+  // ピン留めされたノードパラメータ
+  pinnedParameters?: PinnedParameter[];
   // 生成履歴
   generationHistory?: GenerationHistoryEntry[];
   // PNG取込画像のサムネイル（base64 dataURL、デフォルト256px JPEG）
@@ -90,6 +92,26 @@ export interface ComfyGenerationOverrides {
   denoise: number;
   width?: number;
   height?: number;
+}
+
+// ピン留めされたワークフローノードパラメータ
+export interface PinnedParameter {
+  id: string;
+  nodeId: string;         // ワークフロー内のノードID ("30")
+  nodeClassType: string;  // ノードのclass_type ("LoadImage")
+  paramName: string;      // パラメータ名 ("weight")
+  label: string;          // 表示用ラベル ("IP-Adapter / weight")
+  type: "number" | "string" | "boolean";
+  value: unknown;         // 現在の値
+  defaultValue: unknown;  // ワークフロー読み込み時の初期値
+  // number型のUI制約（/object_info から取得 or 手動設定）
+  min?: number;
+  max?: number;
+  step?: number;
+  // INT型フラグ（seed, steps等の整数パラメータ）
+  isInteger?: boolean;
+  // 選択肢型（sampler_name, scheduler等）
+  options?: string[];
 }
 
 // フォルダ（2階層まで: root → subfolder）
@@ -189,6 +211,24 @@ export function duplicateSession(
     memo: source.memo,
     updatedAt: new Date().toISOString(),
     folderId: source.folderId,
+    // ComfyUI連携設定を引き継ぐ
+    comfyWorkflow: source.comfyWorkflow
+      ? JSON.parse(JSON.stringify(source.comfyWorkflow))
+      : undefined,
+    comfyPositiveNodeId: source.comfyPositiveNodeId,
+    comfyNegativeNodeId: source.comfyNegativeNodeId,
+    comfyApiWorkflow: source.comfyApiWorkflow
+      ? JSON.parse(JSON.stringify(source.comfyApiWorkflow))
+      : undefined,
+    comfyApiPositiveNodeId: source.comfyApiPositiveNodeId,
+    comfyApiNegativeNodeId: source.comfyApiNegativeNodeId,
+    comfyOverrides: source.comfyOverrides
+      ? { ...source.comfyOverrides }
+      : undefined,
+    pinnedParameters: source.pinnedParameters
+      ? source.pinnedParameters.map((p) => ({ ...p, id: crypto.randomUUID() }))
+      : undefined,
+    // generationHistory, thumbnailDataUrl は引き継がない
   };
 }
 
