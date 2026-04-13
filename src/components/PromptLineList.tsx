@@ -8,6 +8,8 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -42,6 +44,7 @@ interface PromptLineListProps {
   onAdd: (line: PromptLine) => void;
   onDuplicate: (id: string) => void;
   onReorder: (activeId: string, overId: string) => void;
+  onReorderMultiple: (movingIds: string[], activeId: string, overId: string) => void;
   onWeightChange: (id: string, delta: number) => void;
   onWeightSet: (id: string, weight: number) => void;
   onBulkToggle: (lineIds: string[], enabled: boolean) => void;
@@ -67,6 +70,7 @@ export default function PromptLineList({
   onAdd,
   onDuplicate,
   onReorder,
+  onReorderMultiple,
   onWeightChange,
   onWeightSet,
   onBulkToggle,
@@ -149,19 +153,55 @@ export default function PromptLineList({
     [lines, onSelectedIdsChange],
   );
 
-  // DnD: 選択モード中は発火距離を極大にして実質無効化（配列サイズ変更の警告回避）
+  // DnD: Selectモード中もdistance:5で有効化（ハンドルからのみドラッグ開始）
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: isSelectMode ? 999999 : 5 },
+      activationConstraint: { distance: 5 },
     }),
   );
 
+  // --- Multi-drag state ---
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(event.active.id as string);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (over && active.id !== over.id) {
-      onReorder(active.id as string, over.id as string);
+    setActiveDragId(null);
+
+    if (!over || active.id === over.id) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // Selectモード中 + ドラッグ元が選択済み → 複数移動
+    if (isSelectMode && selectedIds.has(activeId) && selectedIds.size > 1) {
+      const movingIds = lines
+        .filter((l) => selectedIds.has(l.id))
+        .map((l) => l.id);
+      onReorderMultiple(movingIds, activeId, overId);
+    } else {
+      onReorder(activeId, overId);
     }
   };
+
+  // ドラッグ中に他の選択アイテムをゴースト表示するための判定
+  const ghostIds = useMemo(() => {
+    if (!activeDragId || !isSelectMode || !selectedIds.has(activeDragId)) return new Set<string>();
+    const s = new Set(selectedIds);
+    s.delete(activeDragId); // ドラッグ中のアイテム自体はdnd-kitが処理する
+    return s;
+  }, [activeDragId, isSelectMode, selectedIds]);
+
+  // DragOverlay用: ドラッグ中のアイテム情報
+  const activeDragLine = activeDragId ? lines.find((l) => l.id === activeDragId) : null;
+  const isMultiDrag = isSelectMode && !!activeDragId && selectedIds.has(activeDragId) && selectedIds.size > 1;
+  const multiDragLines = useMemo(() => {
+    if (!isMultiDrag) return [];
+    return lines.filter((l) => selectedIds.has(l.id));
+  }, [isMultiDrag, lines, selectedIds]);
 
   return (
     <div>
@@ -186,6 +226,7 @@ export default function PromptLineList({
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
           <SortableContext
@@ -200,6 +241,7 @@ export default function PromptLineList({
                   weightMode={weightMode}
                   isSelectMode={isSelectMode}
                   isSelected={selectedIds.has(line.id)}
+                  isGhostDrag={ghostIds.has(line.id)}
                   groupLabel={
                     line.groupId
                       ? groups?.find((g) => g.id === line.groupId)?.label
@@ -227,6 +269,54 @@ export default function PromptLineList({
               </button>
             </div>
           </SortableContext>
+          <DragOverlay dropAnimation={null}>
+            {activeDragLine && (
+              <div className="relative">
+                {isMultiDrag ? (
+                  /* 複数アイテムのスタック表示 */
+                  <div className="flex flex-col gap-0.5">
+                    {multiDragLines.map((l, i) => (
+                      <div
+                        key={l.id}
+                        className={`flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800 rounded border shadow-lg ${
+                          l.id === activeDragId
+                            ? "border-sky-500/60 shadow-sky-500/10"
+                            : "border-sky-500/30 shadow-sky-500/5"
+                        }`}
+                        style={{ opacity: i === 0 ? 0.95 : 0.95 - i * 0.05 }}
+                      >
+                        <span className="flex flex-col gap-[3px] py-1 px-0.5 select-none flex-shrink-0">
+                          <span className="block w-3.5 h-[1.5px] bg-neutral-500 rounded-full" />
+                          <span className="block w-3.5 h-[1.5px] bg-neutral-500 rounded-full" />
+                          <span className="block w-3.5 h-[1.5px] bg-neutral-500 rounded-full" />
+                        </span>
+                        <span className="w-4 h-4 rounded border-2 bg-sky-500 border-sky-500 flex items-center justify-center flex-shrink-0">
+                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                            <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </span>
+                        <span className="text-sm font-mono text-neutral-200 truncate">
+                          {l.text}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* 単一アイテム */
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800 rounded border border-sky-500/60 shadow-lg shadow-sky-500/10 opacity-90">
+                    <span className="flex flex-col gap-[3px] py-1 px-0.5 cursor-grabbing select-none">
+                      <span className="block w-3.5 h-[1.5px] bg-neutral-400 rounded-full" />
+                      <span className="block w-3.5 h-[1.5px] bg-neutral-400 rounded-full" />
+                      <span className="block w-3.5 h-[1.5px] bg-neutral-400 rounded-full" />
+                    </span>
+                    <span className="text-sm font-mono text-neutral-200 truncate">
+                      {activeDragLine.text}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </DragOverlay>
         </DndContext>
       ) : (
         /* --- アウトラインビュー --- */
@@ -431,6 +521,7 @@ export default function PromptLineList({
                           weightMode={weightMode}
                           isSelectMode={isSelectMode}
                           isSelected={selectedIds.has(line.id)}
+                          isDragEnabled={false}
                           onToggle={onToggle}
                           onDelete={onDelete}
                           onUpdate={onUpdate}

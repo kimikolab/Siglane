@@ -28,6 +28,12 @@ interface PromptEditorProps {
     activeId: string,
     overId: string,
   ) => void;
+  onReorderMultiple: (
+    type: "positive" | "negative",
+    movingIds: string[],
+    activeId: string,
+    overId: string,
+  ) => void;
   onWeightChange: (type: "positive" | "negative", id: string, delta: number) => void;
   onWeightSet: (type: "positive" | "negative", id: string, weight: number) => void;
   onBulkToggle: (type: "positive" | "negative", lineIds: string[], enabled: boolean) => void;
@@ -57,6 +63,7 @@ export default function PromptEditor({
   onAdd,
   onDuplicate,
   onReorder,
+  onReorderMultiple,
   onWeightChange,
   onWeightSet,
   onBulkToggle,
@@ -105,6 +112,9 @@ export default function PromptEditor({
           onReorder={(activeId, overId) =>
             onReorder("positive", activeId, overId)
           }
+          onReorderMultiple={(movingIds, activeId, overId) =>
+            onReorderMultiple("positive", movingIds, activeId, overId)
+          }
           onWeightChange={(id, delta) => onWeightChange("positive", id, delta)}
           onWeightSet={(id, weight) => onWeightSet("positive", id, weight)}
           onBulkToggle={(ids, enabled) => onBulkToggle("positive", ids, enabled)}
@@ -152,6 +162,9 @@ export default function PromptEditor({
           onDuplicate={(id) => onDuplicate("negative", id)}
           onReorder={(activeId, overId) =>
             onReorder("negative", activeId, overId)
+          }
+          onReorderMultiple={(movingIds, activeId, overId) =>
+            onReorderMultiple("negative", movingIds, activeId, overId)
           }
           onWeightChange={(id, delta) => onWeightChange("negative", id, delta)}
           onWeightSet={(id, weight) => onWeightSet("negative", id, weight)}

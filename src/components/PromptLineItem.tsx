@@ -12,6 +12,8 @@ interface PromptLineItemProps {
   weightMode: WeightMode;
   isSelectMode?: boolean;
   isSelected?: boolean;
+  isGhostDrag?: boolean;
+  isDragEnabled?: boolean;
   groupLabel?: string;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
@@ -31,6 +33,8 @@ export default function PromptLineItem({
   weightMode,
   isSelectMode = false,
   isSelected = false,
+  isGhostDrag = false,
+  isDragEnabled = true,
   groupLabel,
   onToggle,
   onDelete,
@@ -59,12 +63,12 @@ export default function PromptLineItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: line.id, disabled: isSelectMode });
+  } = useSortable({ id: line.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : undefined,
+    opacity: isDragging ? 0.5 : isGhostDrag ? 0.3 : undefined,
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -127,24 +131,37 @@ export default function PromptLineItem({
           isSelectMode ? "cursor-pointer" : ""
         }`}
       >
-        {/* 選択モード: チェックボックス / 通常: ドラッグハンドル */}
+        {/* 選択モード: ドラッグハンドル + チェックボックス / 通常: ドラッグハンドル */}
         {isSelectMode ? (
-          <span className="flex items-center justify-center w-5 h-5 flex-shrink-0">
-            <span
-              className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-                isSelected
-                  ? "bg-sky-500 border-sky-500"
-                  : "border-neutral-500 hover:border-neutral-400"
-              }`}
-            >
-              {isSelected && (
-                <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-                  <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
+          <>
+            {isDragEnabled && (
+              <span
+                {...attributes}
+                {...listeners}
+                className="flex flex-col gap-[3px] py-1 px-0.5 cursor-grab active:cursor-grabbing select-none group/handle flex-shrink-0"
+              >
+                <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
+                <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
+                <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
+              </span>
+            )}
+            <span className="flex items-center justify-center w-5 h-5 flex-shrink-0">
+              <span
+                className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                  isSelected
+                    ? "bg-sky-500 border-sky-500"
+                    : "border-neutral-500 hover:border-neutral-400"
+                }`}
+              >
+                {isSelected && (
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                    <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </span>
             </span>
-          </span>
-        ) : (
+          </>
+        ) : isDragEnabled ? (
           <span
             {...attributes}
             {...listeners}
@@ -154,7 +171,7 @@ export default function PromptLineItem({
             <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
             <span className="block w-3.5 h-[1.5px] bg-neutral-600 rounded-full group-hover/handle:bg-neutral-400 transition-colors" />
           </span>
-        )}
+        ) : null}
 
         {/* ON/OFFトグル（選択モード中は無効化） */}
         <button

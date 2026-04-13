@@ -695,6 +695,34 @@ export default function Home() {
     });
   };
 
+  const handleReorderMultiple = (
+    type: "positive" | "negative",
+    movingIds: string[],
+    activeId: string,
+    overId: string
+  ) => {
+    const key = type === "positive" ? "positiveLines" : "negativeLines";
+    updateActiveSession((s) => {
+      const lines = [...(s[key] as PromptLine[])];
+      const movingSet = new Set(movingIds);
+      // 元の順序を保持したまま移動対象を抽出
+      const moving = lines.filter((l) => movingSet.has(l.id));
+      const remaining = lines.filter((l) => !movingSet.has(l.id));
+      // overIdの位置をremaining配列から探す
+      const insertIdx = remaining.findIndex((l) => l.id === overId);
+      if (insertIdx === -1) {
+        // overIdが移動対象に含まれていた場合 → 末尾に挿入
+        return { ...s, [key]: [...remaining, ...moving] };
+      }
+      // activeIdの元位置とoverIdの元位置で上下方向を判定
+      const activeOrigIdx = lines.findIndex((l) => l.id === activeId);
+      const overOrigIdx = lines.findIndex((l) => l.id === overId);
+      const finalIdx = activeOrigIdx < overOrigIdx ? insertIdx + 1 : insertIdx;
+      remaining.splice(finalIdx, 0, ...moving);
+      return { ...s, [key]: remaining };
+    });
+  };
+
   const handleMemoChange = (memo: string) => {
     updateActiveSession((s) => ({ ...s, memo }));
   };
@@ -1990,6 +2018,7 @@ export default function Home() {
                     onAdd={handleAdd}
                     onDuplicate={handleDuplicate}
                     onReorder={handleReorder}
+                    onReorderMultiple={handleReorderMultiple}
                     onWeightChange={handleWeightChange}
                     onWeightSet={handleWeightSet}
                     onBulkToggle={handleSectionBulkToggle}
