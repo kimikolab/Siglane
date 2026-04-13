@@ -162,6 +162,7 @@ export default function Home() {
   const [weightMode, setWeightMode] = useState<WeightMode>("combined");
   const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
   const [rightPanelTab, setRightPanelTab] = useState<"history" | "dictionary" | "presets">("history");
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [isDictionaryFullView, setIsDictionaryFullView] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
@@ -1998,6 +1999,57 @@ export default function Home() {
 
       {/* 右パネル (管理画面表示中は非表示) */}
       {!isDictionaryFullView && (
+      rightPanelCollapsed ? (
+        /* 折りたたみ時: 細いストリップ */
+        <div className="w-10 flex-shrink-0 border-l border-neutral-800 flex flex-col items-center pt-3 gap-2 bg-neutral-900">
+          <button
+            onClick={() => setRightPanelCollapsed(false)}
+            className="text-neutral-400 hover:text-neutral-200 transition-colors p-1.5"
+            title="Expand panel"
+          >
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M10 3L5 8l5 5"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          {/* 縦書きタブラベル */}
+          <button
+            onClick={() => { setRightPanelCollapsed(false); setRightPanelTab("history"); }}
+            className={`p-1.5 transition-colors ${rightPanelTab === "history" ? "text-neutral-200" : "text-neutral-500 hover:text-neutral-300"}`}
+            title="History"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M8 5v3.5l2.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <button
+            onClick={() => { setRightPanelCollapsed(false); setRightPanelTab("dictionary"); }}
+            className={`p-1.5 transition-colors ${rightPanelTab === "dictionary" ? "text-neutral-200" : "text-neutral-500 hover:text-neutral-300"}`}
+            title="Dictionary"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M3 2.5A1.5 1.5 0 014.5 1H13v11H4.5A1.5 1.5 0 003 10.5v-8z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+              <path d="M3 10.5A1.5 1.5 0 014.5 9H13v5H4.5A1.5 1.5 0 013 12.5v-2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <button
+            onClick={() => { setRightPanelCollapsed(false); setRightPanelTab("presets"); }}
+            className={`p-1.5 transition-colors ${rightPanelTab === "presets" ? "text-neutral-200" : "text-neutral-500 hover:text-neutral-300"}`}
+            title="Presets"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M5 6h6M5 8.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      ) : (
       <div className="w-[340px] flex-shrink-0 border-l border-neutral-800 flex flex-col h-full bg-neutral-900">
         {/* タブバー */}
         <div className="flex items-center gap-1 px-3 pt-3 pb-2 flex-shrink-0">
@@ -2035,6 +2087,22 @@ export default function Home() {
             }`}
           >
             Presets
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={() => setRightPanelCollapsed(true)}
+            className="text-neutral-500 hover:text-neutral-300 transition-colors p-1"
+            title="Collapse panel"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M6 3l5 5-5 5"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
         </div>
 
@@ -2097,7 +2165,7 @@ export default function Home() {
           </div>
         )}
       </div>
-      )}
+      ))}
       </div>
 
       {/* ヘルプオーバーレイ */}
