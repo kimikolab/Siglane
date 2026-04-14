@@ -1943,9 +1943,31 @@ export default function Home() {
                 })()}
                 {/* ピン留めパラメータパネル */}
                 {(activeSession.pinnedParameters?.length ?? 0) > 0 && (
-                  <div className="mb-4 bg-amber-900/10 border border-amber-800/20 rounded-lg px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-                    <span className="text-amber-600 text-[10px] flex-shrink-0">📌 Pinned</span>
-                    {activeSession.pinnedParameters!.map((pin, idx) => (
+                  <div className="mb-4 space-y-1.5">
+                    {(() => {
+                      // ノードごとにグループ化（順序はpinnedParametersの出現順を維持）
+                      const groups: { nodeId: string; nodeTitle: string; pins: typeof activeSession.pinnedParameters }[] = [];
+                      for (const pin of activeSession.pinnedParameters!) {
+                        let group = groups.find((g) => g.nodeId === pin.nodeId);
+                        if (!group) {
+                          const nodeTitle = pin.label.substring(0, pin.label.lastIndexOf(" / ")) || pin.nodeClassType;
+                          group = { nodeId: pin.nodeId, nodeTitle, pins: [] };
+                          groups.push(group);
+                        }
+                        group.pins!.push(pin);
+                      }
+                      return groups.map((group) => (
+                        <div
+                          key={group.nodeId}
+                          className="bg-amber-900/10 border border-amber-800/20 rounded-lg px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs"
+                        >
+                          <span
+                            className="text-amber-700 text-[10px] flex-shrink-0 max-w-[180px] truncate"
+                            title={group.nodeTitle}
+                          >
+                            📌 {group.nodeTitle}
+                          </span>
+                          {group.pins!.map((pin, idx) => (
                       <div key={pin.id} className="flex items-center gap-1.5">
                         {idx > 0 && <span className="text-neutral-700">|</span>}
                         <span className="text-neutral-500" title={pin.label}>
@@ -2067,7 +2089,10 @@ export default function Home() {
                           ↺
                         </button>
                       </div>
-                    ))}
+                          ))}
+                        </div>
+                      ));
+                    })()}
                   </div>
                 )}
                 <div className="space-y-4 mb-6">

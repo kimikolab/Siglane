@@ -113,6 +113,49 @@ export default function WorkflowPanel({
     [pinnedParameters, onUnpinParameter],
   );
 
+  // ノードの全パラメータをピン留め
+  const handlePinAll = useCallback(
+    (node: PinnableNode) => {
+      if (node.isBound) return;
+      const defs = inputDefs[node.classType] ?? [];
+      for (const param of node.params) {
+        const key = `${node.nodeId}:${param.paramName}`;
+        if (pinnedKeys.has(key)) continue;
+        const def = defs.find((d) => d.paramName === param.paramName);
+        const pin: PinnedParameter = {
+          id: crypto.randomUUID(),
+          nodeId: node.nodeId,
+          nodeClassType: node.classType,
+          paramName: param.paramName,
+          label: `${node.title} / ${param.paramName}`,
+          type: param.type,
+          value: def?.isInteger ? Math.round(param.value as number) : param.value,
+          defaultValue: param.value,
+          min: def?.min,
+          max: def?.max,
+          step: def?.isInteger ? Math.max(1, def?.step ?? 1) : def?.step,
+          isInteger: def?.isInteger,
+          options: def?.options,
+        };
+        onPinParameter(pin);
+      }
+    },
+    [inputDefs, pinnedKeys, onPinParameter],
+  );
+
+  // ノードの全パラメータをピン解除
+  const handleUnpinAll = useCallback(
+    (node: PinnableNode) => {
+      for (const param of node.params) {
+        const pin = pinnedParameters.find(
+          (p) => p.nodeId === node.nodeId && p.paramName === param.paramName,
+        );
+        if (pin) onUnpinParameter(pin.id);
+      }
+    },
+    [pinnedParameters, onUnpinParameter],
+  );
+
   if (!workflow) {
     return (
       <div className="text-xs text-neutral-600 text-center mt-8">
@@ -137,9 +180,9 @@ export default function WorkflowPanel({
           return (
             <div key={node.nodeId}>
               {/* ノードヘッダー */}
-              <button
+              <div
                 onClick={() => toggleNode(node)}
-                className={`w-full text-left flex items-center gap-1.5 px-2 py-1.5 rounded text-xs transition-colors ${
+                className={`w-full text-left flex items-center gap-1.5 px-2 py-1.5 rounded text-xs transition-colors cursor-pointer ${
                   node.isBound
                     ? "text-neutral-600 hover:bg-neutral-800/50"
                     : "text-neutral-300 hover:bg-neutral-800"
@@ -163,18 +206,51 @@ export default function WorkflowPanel({
                     bound
                   </span>
                 )}
-                {/* ピン済みパラメータ数 */}
+                {/* ピン済みパラメータ数 + ノード一括ピンボタン */}
                 {(() => {
-                  const pinCount = node.params.filter((p) =>
+                  const pinnableParams = node.params.filter(
+                    () => !node.isBound,
+                  );
+                  const pinCount = pinnableParams.filter((p) =>
                     pinnedKeys.has(`${node.nodeId}:${p.paramName}`),
                   ).length;
-                  return pinCount > 0 ? (
-                    <span className="text-[9px] text-amber-500 flex-shrink-0">
-                      📌 {pinCount}
-                    </span>
-                  ) : null;
+                  const allPinned =
+                    pinnableParams.length > 0 &&
+                    pinCount === pinnableParams.length;
+
+                  return (
+                    <>
+                      {pinCount > 0 && (
+                        <span className="text-[9px] text-amber-500 flex-shrink-0">
+                          📌 {pinCount}
+                        </span>
+                      )}
+                      {isExpanded && !node.isBound && pinnableParams.length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (allPinned) {
+                              handleUnpinAll(node);
+                            } else {
+                              handlePinAll(node);
+                            }
+                          }}
+                          className={`flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded transition-colors ${
+                            allPinned
+                              ? "text-amber-400 hover:text-amber-300 hover:bg-amber-900/30"
+                              : "text-neutral-500 hover:text-amber-400 hover:bg-amber-900/30"
+                          }`}
+                          title={
+                            allPinned ? "Unpin all parameters" : "Pin all parameters"
+                          }
+                        >
+                          {allPinned ? "Unpin all" : "Pin all"}
+                        </button>
+                      )}
+                    </>
+                  );
                 })()}
-              </button>
+              </div>
 
               {/* パラメータ一覧 */}
               {isExpanded && (
