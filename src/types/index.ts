@@ -60,6 +60,8 @@ export interface Session {
   comfyApiWorkflow?: Record<string, unknown>;
   comfyApiPositiveNodeId?: string;
   comfyApiNegativeNodeId?: string;
+  // 読み込んだワークフローのファイル名
+  comfyWorkflowName?: string;
   // 生成パラメータオーバーライド（UIから編集可能）
   comfyOverrides?: ComfyGenerationOverrides;
   // ピン留めされたノードパラメータ
@@ -222,6 +224,7 @@ export function duplicateSession(
       : undefined,
     comfyApiPositiveNodeId: source.comfyApiPositiveNodeId,
     comfyApiNegativeNodeId: source.comfyApiNegativeNodeId,
+    comfyWorkflowName: source.comfyWorkflowName,
     comfyOverrides: source.comfyOverrides
       ? { ...source.comfyOverrides }
       : undefined,

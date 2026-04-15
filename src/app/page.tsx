@@ -505,6 +505,7 @@ export default function Home() {
             negativeGroups: neg.groups,
             memo: formatGenerationParams(result.generationParams),
             comfyWorkflow: json,
+            comfyWorkflowName: file.name,
             comfyPositiveNodeId: result.positiveNodeId,
             comfyNegativeNodeId: result.negativeNodeId,
           };
@@ -1209,6 +1210,7 @@ export default function Home() {
             comfyApiWorkflow: json as Record<string, unknown>,
             comfyApiPositiveNodeId: result.positiveNodeId,
             comfyApiNegativeNodeId: result.negativeNodeId,
+            comfyWorkflowName: file.name,
             comfyOverrides: extractOverrides(json as ComfyApiWorkflow),
           }));
 
@@ -1676,6 +1678,14 @@ export default function Home() {
                           Export for ComfyUI
                         </button>
                       )}
+                    </div>
+                  )}
+                  {/* Loaded workflow name */}
+                  {!isTemplateActive && activeSession?.comfyWorkflowName && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[10px] text-neutral-500">
+                        📄 {activeSession.comfyWorkflowName}
+                      </span>
                     </div>
                   )}
                   {/* PNG サムネイル + Reference Image */}
