@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { DictionaryEntry, DEFAULT_GROUP_CATEGORIES } from "@/types";
+import { DictionaryEntry } from "@/types";
 import {
   loadDictionary,
   addEntry,
@@ -54,7 +54,7 @@ function buildTree(entries: DictionaryEntry[]): TreeNode {
 
 // --- コンポーネント ---
 
-export default function PresetView() {
+export default function PresetView({ groupCategories }: { groupCategories: string[] }) {
   const [allEntries, setAllEntries] = useState<DictionaryEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(new Set());
@@ -174,8 +174,8 @@ export default function PresetView() {
         paths.add(segs.slice(0, i).join("/"));
       }
     }
-    // DEFAULT_GROUP_CATEGORIES も含む
-    for (const cat of DEFAULT_GROUP_CATEGORIES) {
+    // groupCategories も含む
+    for (const cat of groupCategories) {
       paths.add(cat);
     }
     return [...paths].sort();

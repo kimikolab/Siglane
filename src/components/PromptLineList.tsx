@@ -50,6 +50,7 @@ interface PromptLineListProps {
   onBulkToggle: (lineIds: string[], enabled: boolean) => void;
   onSetLineGroup: (id: string, groupLabel: string | null) => void;
   onReplaceGroup: (groupId: string, groupLabel: string, newPrompts: string[]) => void;
+  groupCategories: string[];
   annotations: Record<string, string>;
   onSetAnnotation: (text: string, description: string) => void;
 }
@@ -76,6 +77,7 @@ export default function PromptLineList({
   onBulkToggle,
   onSetLineGroup,
   onReplaceGroup,
+  groupCategories,
   annotations,
   onSetAnnotation,
 }: PromptLineListProps) {
@@ -255,6 +257,7 @@ export default function PromptLineList({
                   onWeightSet={onWeightSet}
                   onSelect={handleSelect}
                   onSetLineGroup={onSetLineGroup}
+                  groupCategories={groupCategories}
                   annotation={getAnnotation(annotations, line.text)}
                   onSetAnnotation={onSetAnnotation}
                   isDuplicate={duplicateKeys.has(normalizeForLookup(line.text))}
@@ -535,6 +538,7 @@ export default function PromptLineList({
                           onWeightSet={onWeightSet}
                           onSelect={handleSelect}
                           onSetLineGroup={onSetLineGroup}
+                          groupCategories={groupCategories}
                           annotation={getAnnotation(annotations, line.text)}
                           onSetAnnotation={onSetAnnotation}
                           isDuplicate={duplicateKeys.has(normalizeForLookup(line.text))}

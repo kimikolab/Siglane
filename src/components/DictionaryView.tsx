@@ -17,6 +17,8 @@ interface DictionaryViewProps {
   onDeleteAnnotation: (key: string) => void;
   onUpdateGroup: (key: string, group: string | null) => void;
   onOpenBulkNotes?: (json: string) => void;
+  groupCategories: string[];
+  onUpdateGroupCategories: (categories: string[]) => void;
 }
 
 export default function DictionaryView({
@@ -26,13 +28,15 @@ export default function DictionaryView({
   onDeleteAnnotation,
   onUpdateGroup,
   onOpenBulkNotes,
+  groupCategories,
+  onUpdateGroupCategories,
 }: DictionaryViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"flat" | "outline">("flat");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // --- タブ ---
-  const [activeTab, setActiveTab] = useState<"tags" | "presets">("tags");
+  const [activeTab, setActiveTab] = useState<"tags" | "presets" | "groups">("tags");
 
   // --- 新規タグ追加 ---
   const [isAddingTag, setIsAddingTag] = useState(false);
@@ -174,11 +178,26 @@ export default function DictionaryView({
           >
             Presets
           </button>
+          <button
+            onClick={() => { setActiveTab("groups"); exitSelectMode(); }}
+            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+              activeTab === "groups"
+                ? "bg-neutral-700 text-neutral-100"
+                : "text-neutral-500 hover:text-neutral-300"
+            }`}
+          >
+            Groups
+          </button>
         </div>
         <div className="flex-1" />
         {activeTab === "tags" && (
           <p className="text-xs text-neutral-500">
             {allEntries.length} tags — {Object.keys(annotations).length} annotated, {Object.keys(defaultGroups).length} grouped
+          </p>
+        )}
+        {activeTab === "groups" && (
+          <p className="text-xs text-neutral-500">
+            {groupCategories.length} groups
           </p>
         )}
       </div>
@@ -313,7 +332,7 @@ export default function DictionaryView({
               className="bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-sky-500 cursor-pointer"
             >
               <option value="">Group...</option>
-              {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+              {groupCategories.map((cat) => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
@@ -378,7 +397,7 @@ export default function DictionaryView({
                 className="absolute top-full right-0 mt-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[160px]"
                 style={{ zIndex: 50 }}
               >
-                {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+                {groupCategories.map((cat) => (
                   <button
                     key={cat}
                     onClick={() => handleBulkSetGroup(cat)}
@@ -465,6 +484,7 @@ export default function DictionaryView({
               onUpdateAnnotation={onUpdateAnnotation}
               onDeleteAnnotation={onDeleteAnnotation}
               onUpdateGroup={onUpdateGroup}
+              groupCategories={groupCategories}
             />
           ))}
           {filteredEntries.length === 0 && (
@@ -493,11 +513,11 @@ export default function DictionaryView({
               }
             }
 
-            // DEFAULT_GROUP_CATEGORIES順に並べ、その後にカスタムグループ
+            // groupCategories順に並べ、その後にカスタムグループ
             const orderedGroupLabels = [
-              ...DEFAULT_GROUP_CATEGORIES.filter((c) => grouped.has(c)),
+              ...groupCategories.filter((c) => grouped.has(c)),
               ...[...grouped.keys()].filter(
-                (k) => !(DEFAULT_GROUP_CATEGORIES as readonly string[]).includes(k),
+                (k) => !groupCategories.includes(k),
               ),
             ];
 
@@ -557,6 +577,7 @@ export default function DictionaryView({
                               onDeleteAnnotation={onDeleteAnnotation}
                               onUpdateGroup={onUpdateGroup}
                               hideGroupBadge
+                              groupCategories={groupCategories}
                             />
                           ))}
                         </div>
@@ -614,6 +635,7 @@ export default function DictionaryView({
                             onUpdateAnnotation={onUpdateAnnotation}
                             onDeleteAnnotation={onDeleteAnnotation}
                             onUpdateGroup={onUpdateGroup}
+                            groupCategories={groupCategories}
                           />
                         ))}
                       </div>
@@ -632,9 +654,131 @@ export default function DictionaryView({
       )}
       </div>
       </>
+      ) : activeTab === "presets" ? (
+        <PresetView groupCategories={groupCategories} />
       ) : (
-        <PresetView />
+        <GroupsManager
+          groupCategories={groupCategories}
+          onUpdateGroupCategories={onUpdateGroupCategories}
+        />
       )}
+    </div>
+  );
+}
+
+// --- Groups管理コンポーネント ---
+
+function GroupsManager({
+  groupCategories,
+  onUpdateGroupCategories,
+}: {
+  groupCategories: string[];
+  onUpdateGroupCategories: (categories: string[]) => void;
+}) {
+  const [newGroupName, setNewGroupName] = useState("");
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleAdd = useCallback(() => {
+    const name = newGroupName.trim();
+    if (!name) return;
+    if (groupCategories.includes(name)) return;
+    onUpdateGroupCategories([...groupCategories, name]);
+    setNewGroupName("");
+    inputRef.current?.focus();
+  }, [newGroupName, groupCategories, onUpdateGroupCategories]);
+
+  const handleRemove = useCallback((name: string) => {
+    onUpdateGroupCategories(groupCategories.filter((c) => c !== name));
+  }, [groupCategories, onUpdateGroupCategories]);
+
+  const handleReset = useCallback(() => {
+    onUpdateGroupCategories([...DEFAULT_GROUP_CATEGORIES]);
+    setShowResetConfirm(false);
+  }, [onUpdateGroupCategories]);
+
+  const isDefault = useMemo(() => {
+    if (groupCategories.length !== DEFAULT_GROUP_CATEGORIES.length) return false;
+    return groupCategories.every((c, i) => c === DEFAULT_GROUP_CATEGORIES[i]);
+  }, [groupCategories]);
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <p className="text-xs text-neutral-500">
+          {groupCategories.length} groups
+        </p>
+        {!isDefault && (
+          showResetConfirm ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-neutral-400">Reset to defaults?</span>
+              <button
+                onClick={handleReset}
+                className="text-[10px] text-red-400 hover:text-red-300 transition-colors"
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
+            >
+              Reset to defaults
+            </button>
+          )
+        )}
+      </div>
+
+      {/* 追加フォーム */}
+      <div className="flex gap-2 mb-4 flex-shrink-0">
+        <input
+          ref={inputRef}
+          type="text"
+          value={newGroupName}
+          onChange={(e) => setNewGroupName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAdd();
+          }}
+          placeholder="New group name..."
+          className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-neutral-500"
+        />
+        <button
+          onClick={handleAdd}
+          disabled={!newGroupName.trim() || groupCategories.includes(newGroupName.trim())}
+          className="px-3 py-2 text-sm bg-sky-600 hover:bg-sky-500 disabled:bg-neutral-700 disabled:text-neutral-500 text-white rounded-lg transition-colors"
+        >
+          Add
+        </button>
+      </div>
+
+      {/* リスト */}
+      <div className="flex-1 overflow-y-auto sidebar-scroll">
+        <div className="flex flex-col gap-0.5">
+          {groupCategories.map((cat) => (
+            <div
+              key={cat}
+              className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-neutral-800/50 transition-colors group/row"
+            >
+              <span className="text-sm text-neutral-200">{cat}</span>
+              <button
+                onClick={() => handleRemove(cat)}
+                className="w-5 h-5 flex items-center justify-center text-neutral-700 hover:text-red-400 transition-colors opacity-0 group-hover/row:opacity-100"
+                title={`Remove ${cat}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -650,6 +794,7 @@ function DictionaryRow({
   onDeleteAnnotation,
   onUpdateGroup,
   hideGroupBadge = false,
+  groupCategories,
 }: {
   entry: DictionaryEntry;
   isSelectMode?: boolean;
@@ -659,6 +804,7 @@ function DictionaryRow({
   onDeleteAnnotation: (key: string) => void;
   onUpdateGroup: (key: string, group: string | null) => void;
   hideGroupBadge?: boolean;
+  groupCategories: string[];
 }) {
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [descValue, setDescValue] = useState(entry.description);
@@ -772,7 +918,7 @@ function DictionaryRow({
               className="absolute top-full right-0 mt-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[140px]"
               style={{ zIndex: 50 }}
             >
-              {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+              {groupCategories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => {

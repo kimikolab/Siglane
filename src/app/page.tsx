@@ -12,7 +12,6 @@ import {
   ComfyGenerationOverrides,
   PinnedParameter,
   GenerationHistoryEntry,
-  DEFAULT_GROUP_CATEGORIES,
   parsePrompt,
   joinPromptLines,
   joinAllPromptLines,
@@ -92,6 +91,11 @@ import {
   recordDefaultGroup,
   removeDefaultGroup,
 } from "@/utils/defaultGroups";
+import {
+  loadGroupCategories,
+  saveGroupCategories,
+  resetGroupCategories,
+} from "@/utils/groupCategories";
 import {
   type NegativeTags,
   loadNegativeTags,
@@ -214,10 +218,12 @@ export default function Home() {
   const [bulkNotesFilter, setBulkNotesFilter] = useState<"unannotated" | "missing_group" | "all">("unannotated");
   const [defaultGroups, setDefaultGroups] = useState<DefaultGroups>({});
   const [negativeTags, setNegativeTags] = useState<NegativeTags>({});
+  const [groupCategories, setGroupCategories] = useState<string[]>([]);
   useEffect(() => {
     setAnnotations(loadAnnotations());
     setDefaultGroups(loadDefaultGroups());
     setNegativeTags(loadNegativeTags());
+    setGroupCategories(loadGroupCategories());
   }, []);
   const isInitial = useRef(true);
 
@@ -465,6 +471,9 @@ export default function Home() {
     setAnnotations(data.annotations ?? {});
     setDefaultGroups((data.defaultGroups ?? {}) as DefaultGroups);
     setNegativeTags((data.negativeTags ?? {}) as NegativeTags);
+    if (data.groupCategories) {
+      setGroupCategories(data.groupCategories);
+    }
   }, []);
 
   // --- ComfyUI連携 ---
@@ -1551,6 +1560,11 @@ export default function Home() {
                   setBulkAnnotationText(json);
                   setShowBulkAnnotation(true);
                 }}
+                groupCategories={groupCategories}
+                onUpdateGroupCategories={(cats) => {
+                  setGroupCategories(cats);
+                  saveGroupCategories(cats);
+                }}
               />
             </>
           ) : (
@@ -2189,6 +2203,7 @@ export default function Home() {
                     onReplaceGroup={handleReplaceGroup}
                     annotations={annotations}
                     onSetAnnotation={handleSetAnnotation}
+                    groupCategories={groupCategories}
                   />
                 </div>
 
@@ -2250,7 +2265,7 @@ export default function Home() {
                     className="absolute bottom-full right-0 mb-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[160px]"
                     style={{ zIndex: 50 }}
                   >
-                    {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+                    {groupCategories.map((cat) => (
                       <button
                         key={cat}
                         onClick={() => {
@@ -2347,7 +2362,7 @@ export default function Home() {
                         className="absolute bottom-full right-0 mb-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[140px]"
                         style={{ zIndex: 50 }}
                       >
-                        {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+                        {groupCategories.map((cat) => (
                           <button
                             key={cat}
                             onClick={() => {
@@ -2438,8 +2453,8 @@ export default function Home() {
                         ? allGroups.find((g) => g.id === Array.from(selectedGroupIds)[0])?.label
                         : undefined;
                       const categoriesToShow = priorityLabel
-                        ? [priorityLabel, ...DEFAULT_GROUP_CATEGORIES.filter((c) => c !== priorityLabel)]
-                        : DEFAULT_GROUP_CATEGORIES;
+                        ? [priorityLabel, ...groupCategories.filter((c) => c !== priorityLabel)]
+                        : groupCategories;
 
                       let hasAny = false;
                       return (

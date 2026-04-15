@@ -41,6 +41,7 @@ interface PromptEditorProps {
   onReplaceGroup: (type: "positive" | "negative", groupId: string, groupLabel: string, newPrompts: string[]) => void;
   annotations: Record<string, string>;
   onSetAnnotation: (text: string, description: string) => void;
+  groupCategories: string[];
 }
 
 export default function PromptEditor({
@@ -71,6 +72,7 @@ export default function PromptEditor({
   onReplaceGroup,
   annotations,
   onSetAnnotation,
+  groupCategories,
 }: PromptEditorProps) {
   return (
     <div>
@@ -120,6 +122,7 @@ export default function PromptEditor({
           onBulkToggle={(ids, enabled) => onBulkToggle("positive", ids, enabled)}
           onSetLineGroup={(id, label) => onSetLineGroup("positive", id, label)}
           onReplaceGroup={(gid, label, prompts) => onReplaceGroup("positive", gid, label, prompts)}
+          groupCategories={groupCategories}
         />
       )}
 
@@ -171,6 +174,7 @@ export default function PromptEditor({
           onBulkToggle={(ids, enabled) => onBulkToggle("negative", ids, enabled)}
           onSetLineGroup={(id, label) => onSetLineGroup("negative", id, label)}
           onReplaceGroup={(gid, label, prompts) => onReplaceGroup("negative", gid, label, prompts)}
+          groupCategories={groupCategories}
         />
       )}
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { PromptLine, DEFAULT_GROUP_CATEGORIES, extractWeight, hasSpecialWeightSyntax, calcSpecialWeight } from "@/types";
+import { PromptLine, extractWeight, hasSpecialWeightSyntax, calcSpecialWeight } from "@/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -23,6 +23,7 @@ interface PromptLineItemProps {
   onWeightSet: (id: string, weight: number) => void;
   onSelect?: (id: string, shiftKey: boolean) => void;
   onSetLineGroup?: (id: string, groupLabel: string | null) => void;
+  groupCategories: string[];
   annotation?: string;
   onSetAnnotation?: (text: string, description: string) => void;
   isDuplicate?: boolean;
@@ -44,6 +45,7 @@ export default function PromptLineItem({
   onWeightSet,
   onSelect,
   onSetLineGroup,
+  groupCategories,
   annotation,
   onSetAnnotation,
   isDuplicate = false,
@@ -318,7 +320,7 @@ export default function PromptLineItem({
                 className="absolute top-full right-0 mt-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[140px]"
                 style={{ zIndex: 50 }}
               >
-                {DEFAULT_GROUP_CATEGORIES.map((cat) => (
+                {groupCategories.map((cat) => (
                   <button
                     key={cat}
                     onClick={(e) => {

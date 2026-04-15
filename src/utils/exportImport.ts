@@ -11,6 +11,7 @@ export interface SiglaneExportData {
   annotations: Record<string, string>;
   defaultGroups: Record<string, string>;
   negativeTags: Record<string, boolean>;
+  groupCategories?: string[];
 }
 
 const STORAGE_KEYS = {
@@ -19,6 +20,7 @@ const STORAGE_KEYS = {
   annotations: "siglane-annotations",
   defaultGroups: "siglane-default-groups",
   negativeTags: "siglane-negative-tags",
+  groupCategories: "siglane-group-categories",
 } as const;
 
 // --- エクスポート ---
@@ -48,6 +50,8 @@ export function buildExportData(): SiglaneExportData {
       (readJson(STORAGE_KEYS.defaultGroups) as Record<string, string>) ?? {},
     negativeTags:
       (readJson(STORAGE_KEYS.negativeTags) as Record<string, boolean>) ?? {},
+    groupCategories:
+      (readJson(STORAGE_KEYS.groupCategories) as string[]) ?? undefined,
   };
 }
 
@@ -134,6 +138,8 @@ export function validateImportData(
       data.negativeTags && typeof data.negativeTags === "object"
         ? (data.negativeTags as Record<string, boolean>)
         : {},
+    groupCategories:
+      Array.isArray(data.groupCategories) ? (data.groupCategories as string[]) : undefined,
   };
 
   return {
@@ -162,6 +168,12 @@ export function applyImportData(data: SiglaneExportData): void {
     STORAGE_KEYS.negativeTags,
     JSON.stringify(data.negativeTags)
   );
+  if (data.groupCategories) {
+    localStorage.setItem(
+      STORAGE_KEYS.groupCategories,
+      JSON.stringify(data.groupCategories)
+    );
+  }
 }
 
 export function readImportFile(file: File): Promise<unknown> {
