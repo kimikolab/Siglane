@@ -279,7 +279,8 @@ export function setWeight(text: string, weight: number): string {
 }
 
 // 特殊な重み記法を使っているか判定
-// 多重括弧 ((tag)), 数値なし括弧 (tag), 角括弧 [tag] [tag:0.8] など
+// 多重括弧 ((tag)), 数値なし括弧 (tag), 角括弧 [tag] [tag:0.8],
+// NovelAI波括弧 {tag} {{tag}} など
 // これらはスライダーで操作すると壊れるため、対象外にする
 export function hasSpecialWeightSyntax(text: string): boolean {
   const t = text.trim();
@@ -290,11 +291,14 @@ export function hasSpecialWeightSyntax(text: string): boolean {
   if (/^\([^()]+\)$/.test(t) && !WEIGHT_PATTERN.test(t)) return true;
   // 角括弧: [tag] or [tag:0.8]
   if (/^\[.+\]$/.test(t)) return true;
+  // NovelAI波括弧: {tag} {{tag}} (1.05倍/階)
+  if (/^\{+[^{}]+\}+$/.test(t)) return true;
   return false;
 }
 
 // 特殊記法の実効重みを計算
-// (tag) = 1.1, ((tag)) = 1.21, [tag] = 0.91, [tag:0.8] = 0.8
+// (tag) = 1.1, ((tag)) = 1.21, [tag] = 0.91, [tag:0.8] = 0.8,
+// {tag} = 1.05, {{tag}} = 1.10 (NovelAI仕様)
 export function calcSpecialWeight(text: string): number | null {
   const t = text.trim();
 
@@ -324,6 +328,16 @@ export function calcSpecialWeight(text: string): number | null {
     return Math.round((1 / 1.1) * 100) / 100;
   }
 
+  // NovelAI波括弧: {tag} = 1.05, {{tag}} = 1.05^2, ...
+  if (/^\{+[^{}]+\}+$/.test(t)) {
+    let depth = 0;
+    for (const ch of t) {
+      if (ch === "{") depth++;
+      else break;
+    }
+    return Math.round(Math.pow(1.05, depth) * 100) / 100;
+  }
+
   return null;
 }
 
@@ -337,7 +351,7 @@ export function adjustWeight(text: string, delta: number): string {
 // --- パーサー ---
 
 // カンマ区切りテキストをPromptLine[]に変換するパーサー
-// 括弧 () [] <> の中のカンマでは分割しない
+// 括弧 () [] <> {} の中のカンマでは分割しない
 export function parsePrompt(raw: string): PromptLine[] {
   if (!raw.trim()) return [];
 
@@ -346,10 +360,10 @@ export function parsePrompt(raw: string): PromptLine[] {
   let depth = 0;
 
   for (const ch of raw) {
-    if (ch === "(" || ch === "[" || ch === "<") {
+    if (ch === "(" || ch === "[" || ch === "<" || ch === "{") {
       depth++;
       current += ch;
-    } else if (ch === ")" || ch === "]" || ch === ">") {
+    } else if (ch === ")" || ch === "]" || ch === ">" || ch === "}") {
       depth = Math.max(0, depth - 1);
       current += ch;
     } else if (ch === "," && depth === 0) {
