@@ -1140,6 +1140,13 @@ export default function Home() {
   const [llmSettings, setLlmSettings] = useState<LlmSettings>(createDefaultLlmSettings);
   const [showLlmSettingsModal, setShowLlmSettingsModal] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translateProgress, setTranslateProgress] = useState<{
+    done: number;
+    total: number;
+    batchIndex: number;
+    batchCount: number;
+  } | null>(null);
+  const translateAbortRef = useRef<AbortController | null>(null);
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
 
@@ -3151,24 +3158,49 @@ export default function Home() {
               <div className="flex items-center gap-2 mb-3">
                 <button
                   onClick={async () => {
+                    if (isTranslating) {
+                      // キャンセル
+                      translateAbortRef.current?.abort();
+                      return;
+                    }
+                    const controller = new AbortController();
+                    translateAbortRef.current = controller;
                     setIsTranslating(true);
-                    const result = await translateTags(llmSettings, bulkAnnotationText);
+                    setTranslateProgress(null);
+                    const result = await translateTags(
+                      llmSettings,
+                      bulkAnnotationText,
+                      {
+                        signal: controller.signal,
+                        onProgress: (p) => setTranslateProgress(p),
+                      },
+                    );
                     setIsTranslating(false);
+                    setTranslateProgress(null);
+                    translateAbortRef.current = null;
                     if (result.ok) {
                       setBulkAnnotationText(result.result);
-                      setGenerateToast({ message: "LLM auto-fill complete", type: "success" });
+                      if (result.warning) {
+                        setGenerateToast({ message: `Partial: ${result.warning}`, type: "error" });
+                      } else {
+                        setGenerateToast({ message: "LLM auto-fill complete", type: "success" });
+                      }
                     } else {
                       setGenerateToast({ message: result.error, type: "error" });
                     }
                   }}
-                  disabled={isTranslating || !bulkAnnotationText.trim()}
+                  disabled={!isTranslating && !bulkAnnotationText.trim()}
                   className={`px-3 py-1.5 text-xs rounded transition-colors ${
                     isTranslating
-                      ? "bg-neutral-700 text-neutral-500 cursor-wait"
+                      ? "bg-amber-700 hover:bg-amber-600 text-white"
                       : "bg-sky-600 hover:bg-sky-500 text-white"
                   } disabled:opacity-40`}
                 >
-                  {isTranslating ? "Translating..." : "Auto-fill with LLM"}
+                  {isTranslating
+                    ? translateProgress
+                      ? `Cancel (${translateProgress.batchIndex}/${translateProgress.batchCount})`
+                      : "Cancel"
+                    : "Auto-fill with LLM"}
                 </button>
                 <button
                   onClick={() => setShowLlmSettingsModal(true)}

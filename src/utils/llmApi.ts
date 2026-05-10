@@ -113,9 +113,11 @@ export async function testLlmConnection(
 }
 
 // LLMにタグリストを送信して注釈・グループ・ネガティブ情報を取得
-export async function translateTags(
+// 内部用：1バッチ分のタグを処理する
+async function translateTagsBatch(
   settings: LlmSettings,
   tagsJson: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; result: string } | { ok: false; error: string }> {
   const { connection, systemPrompt } = settings;
 
@@ -140,6 +142,7 @@ export async function translateTags(
       method: "POST",
       headers,
       body: JSON.stringify(body),
+      signal,
     });
 
     if (!resp.ok) {
@@ -164,7 +167,148 @@ export async function translateTags(
 
     return { ok: true, result: cleaned };
   } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return { ok: false, error: "Cancelled" };
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
     return { ok: false, error: `LLM request failed: ${message}` };
   }
+}
+
+// バッチサイズと1タグあたりのタイムアウト（ms）
+const BATCH_SIZE = 10;
+const TIMEOUT_MS_PER_TAG = 60_000;
+
+export interface TranslateProgress {
+  done: number;
+  total: number;
+  batchIndex: number;
+  batchCount: number;
+}
+
+// LLMにタグリストを送信。大量タグはバッチ分割して順次処理。
+// signal: 外部からのキャンセル用
+// onProgress: バッチ完了ごとに呼ばれる進捗コールバック
+// 戻り値の warning: 部分失敗時に何件失敗したかを伝える
+export async function translateTags(
+  settings: LlmSettings,
+  tagsJson: string,
+  options?: {
+    signal?: AbortSignal;
+    onProgress?: (progress: TranslateProgress) => void;
+  },
+): Promise<
+  | { ok: true; result: string; warning?: string }
+  | { ok: false; error: string }
+> {
+  // 入力JSONをパース
+  let entries: unknown[];
+  try {
+    const parsed = JSON.parse(tagsJson);
+    if (!Array.isArray(parsed)) {
+      return { ok: false, error: "Input is not a JSON array" };
+    }
+    entries = parsed;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Parse error";
+    return { ok: false, error: `Invalid JSON input: ${message}` };
+  }
+
+  if (entries.length === 0) {
+    return { ok: true, result: tagsJson };
+  }
+
+  // バッチ分割
+  const batches: unknown[][] = [];
+  for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+    batches.push(entries.slice(i, i + BATCH_SIZE));
+  }
+
+  const externalSignal = options?.signal;
+  const onProgress = options?.onProgress;
+  const results: unknown[] = [];
+  const failedBatches: number[] = [];
+  let lastError: string | null = null;
+
+  onProgress?.({
+    done: 0,
+    total: entries.length,
+    batchIndex: 0,
+    batchCount: batches.length,
+  });
+
+  for (let bi = 0; bi < batches.length; bi++) {
+    if (externalSignal?.aborted) {
+      return { ok: false, error: "Cancelled" };
+    }
+
+    const batch = batches[bi];
+    // バッチサイズに応じたタイムアウト + 外部シグナルを合成
+    const timeoutMs = TIMEOUT_MS_PER_TAG * batch.length;
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
+
+    const onExternalAbort = () => timeoutController.abort();
+    externalSignal?.addEventListener("abort", onExternalAbort);
+
+    const batchResult = await translateTagsBatch(
+      settings,
+      JSON.stringify(batch, null, 2),
+      timeoutController.signal,
+    );
+
+    clearTimeout(timeoutId);
+    externalSignal?.removeEventListener("abort", onExternalAbort);
+
+    if (externalSignal?.aborted) {
+      return { ok: false, error: "Cancelled" };
+    }
+
+    if (batchResult.ok) {
+      try {
+        const parsed = JSON.parse(batchResult.result);
+        if (Array.isArray(parsed)) {
+          results.push(...parsed);
+        } else {
+          failedBatches.push(bi);
+          results.push(...batch);
+          lastError = `Batch ${bi + 1}: response was not an array`;
+        }
+      } catch {
+        failedBatches.push(bi);
+        results.push(...batch);
+        lastError = `Batch ${bi + 1}: failed to parse response`;
+      }
+    } else {
+      failedBatches.push(bi);
+      results.push(...batch);
+      lastError = `Batch ${bi + 1}: ${batchResult.error}`;
+    }
+
+    onProgress?.({
+      done: Math.min((bi + 1) * BATCH_SIZE, entries.length),
+      total: entries.length,
+      batchIndex: bi + 1,
+      batchCount: batches.length,
+    });
+  }
+
+  const merged = JSON.stringify(results, null, 2);
+
+  if (failedBatches.length === batches.length) {
+    return {
+      ok: false,
+      error: lastError ?? "All batches failed",
+    };
+  }
+
+  if (failedBatches.length > 0) {
+    return {
+      ok: true,
+      result: merged,
+      warning: `${failedBatches.length}/${batches.length} batches failed (${lastError ?? "unknown error"}). Failed entries kept as-is.`,
+    };
+  }
+
+  return { ok: true, result: merged };
 }
